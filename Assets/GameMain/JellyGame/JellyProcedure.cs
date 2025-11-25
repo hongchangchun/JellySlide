@@ -40,13 +40,14 @@ namespace StarForce
             
             MapManager.Instance.InitLevel(map);
 
-            // 2. 生成实体 (需要在 EntityGroup 中配置好 "Jelly" 组)
+            // 2. 生成实体 (需要在 EntityGroup 中配置好 "JellyGroup" 组)
             // 这里的 EntityId 100 是玩家, 200 是敌人
             MapManager.Instance.AddEntity(100, 0, 2, 2); 
-            GameEntry.Entity.ShowEntity(100, typeof(JellyLogic), "Assets/Res/Entity/Jelly.prefab", "JellyGroup", MapManager.Instance.m_Entities[100]);
+            // 使用正确的资源路径格式
+            GameEntry.Entity.ShowEntity(100, typeof(JellyLogic), AssetUtility.GetEntityAsset("Jelly"), "JellyGroup", MapManager.Instance.m_Entities[100]);
 
             MapManager.Instance.AddEntity(200, 1, 4, 2);
-            GameEntry.Entity.ShowEntity(200, typeof(JellyLogic), "Assets/Res/Entity/Jelly.prefab", "JellyGroup", MapManager.Instance.m_Entities[200]);
+            GameEntry.Entity.ShowEntity(200, typeof(JellyLogic), AssetUtility.GetEntityAsset("Jelly"), "JellyGroup", MapManager.Instance.m_Entities[200]);
 
             // 订阅事件
             GameEntry.Event.Subscribe(JellyMoveCompleteEventArgs.EventId, OnJellyMoveComplete);

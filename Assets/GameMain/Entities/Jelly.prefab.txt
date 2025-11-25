@@ -1,0 +1,19 @@
+# Jelly实体预设配置说明
+# 请在Unity编辑器中创建此预设并添加以下组件：
+
+1. 基本结构：
+   - GameObject名称：Jelly
+   - 添加SpriteRenderer组件（使用圆形或椭圆形Sprite）
+   - 添加Entity脚本组件
+
+2. 脚本组件：
+   - 添加JellyLogic组件（挂载在Jelly.prefab上的逻辑脚本）
+   - 确保脚本引用正确
+
+3. 其他设置：
+   - 确保预设位于Assets/GameMain/Entities/目录下
+   - 命名为Jelly.prefab
+
+# 使用说明
+# 此预设将通过EntityComponent和JellyGroup实体组管理
+# 可以通过JellyProcedure中的ShowEntity方法显示
