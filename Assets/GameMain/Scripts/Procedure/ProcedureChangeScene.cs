@@ -96,7 +96,7 @@ namespace StarForce
             }
             else
             {
-                ChangeState<ProcedureMain>(procedureOwner);
+                ChangeState<ProcedureJellyGame>(procedureOwner);
             }
         }
 
