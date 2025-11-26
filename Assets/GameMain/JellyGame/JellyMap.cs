@@ -12,16 +12,20 @@ namespace StarForce
         private static MapManager s_Instance;
         public static MapManager Instance => s_Instance ?? (s_Instance = new MapManager());
 
-        // 地图常量定义 - 直接使用GameConstants中的常量
-        // 常量定义在GameConstants.cs中
-        
-        // 0:空, 1:墙, 4:饼干墙(可破坏), 9:陷阱
+        // 0:空, 1:墙, 4:饼干墙(可破坏)
         private int[,] m_Grid;
         private int m_Size = 6;
-        private float m_CellSize = 2f; // 每个格子的大小
+        private float m_CellSize = 1.5f;
         
         // 存储动态实体的数据引用: Key=EntityId, Value=JellyData
         public Dictionary<int, JellyData> m_Entities = new Dictionary<int, JellyData>();
+        
+        // 网格可视化相关
+        private GameObject m_GridVisualRoot;
+        private GameObject[,] m_CellVisuals; // 存储格子的可视化对象
+        private Color m_EmptyCellColor = new Color(0.9f, 0.9f, 0.9f, 0.5f); // 空格子颜色
+        private Color m_WallCellColor = new Color(0.3f, 0.3f, 0.3f, 1f);    // 墙颜色
+        private Color m_CrackerColor = new Color(0.8f, 0.6f, 0.2f, 1f);     // 饼干墙颜色
 
         // 简单的实体数据类
         public class JellyData
@@ -34,22 +38,11 @@ namespace StarForce
             public bool IsDead => Hp <= 0;
         }
 
-        /// <summary>
-        /// 初始化关卡，深拷贝地图数据
-        /// </summary>
-        /// <param name="mapData">原始地图数据</param>
         public void InitLevel(int[,] mapData)
         {
             // 深拷贝地图数据
-            if (mapData == null || mapData.GetLength(0) == 0 || mapData.GetLength(1) == 0)
-            {
-                Log.Error("Invalid map data");
-                return;
-            }
-            
             m_Size = mapData.GetLength(0);
             m_Grid = new int[m_Size, m_Size];
-            
             for (int y = 0; y < m_Size; y++)
             {
                 for (int x = 0; x < m_Size; x++)
@@ -59,142 +52,141 @@ namespace StarForce
             }
             
             m_Entities.Clear();
+            CreateGridVisuals();
+        }
+        
+        /// <summary>
+        /// 创建网格可视化
+        /// </summary>
+        private void CreateGridVisuals()
+        {
+            // 销毁旧的网格可视化
+            if (m_GridVisualRoot != null)
+            {
+                Object.Destroy(m_GridVisualRoot);
+            }
+            
+            // 创建新的根对象
+            m_GridVisualRoot = new GameObject("GridVisuals");
+            m_CellVisuals = new GameObject[m_Size, m_Size];
+            
+            // 计算偏移量，使网格居中
+            float offsetX = -(m_Size - 1) * m_CellSize * 0.5f;
+            float offsetY = -(m_Size - 1) * m_CellSize * 0.5f;
+            
+            // 创建每个格子的可视化
+            for (int y = 0; y < m_Size; y++)
+            {
+                for (int x = 0; x < m_Size; x++)
+                {
+                    GameObject cell = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                    cell.name = $"Cell_{x}_{y}";
+                    cell.transform.SetParent(m_GridVisualRoot.transform);
+                    
+                    // 设置位置和大小
+                    Vector3 worldPos = new Vector3(
+                        x * m_CellSize + offsetX,
+                        y * m_CellSize + offsetY,
+                        1f); // 在实体下方
+                    cell.transform.position = worldPos;
+                    cell.transform.localScale = new Vector3(m_CellSize * 0.95f, m_CellSize * 0.95f, 1f);
+                    
+                    // 设置颜色
+                    Renderer renderer = cell.GetComponent<Renderer>();
+                    if (renderer != null)
+                    {
+                        switch (m_Grid[y, x])
+                        {
+                            case 1: // 墙
+                                renderer.material.color = m_WallCellColor;
+                                break;
+                            case 4: // 饼干墙
+                                renderer.material.color = m_CrackerColor;
+                                break;
+                            default: // 空格子
+                                renderer.material.color = m_EmptyCellColor;
+                                break;
+                        }
+                    }
+                    
+                    // 添加边框
+                    AddBorderToCell(cell);
+                    
+                    m_CellVisuals[y, x] = cell;
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 为格子添加边框
+        /// </summary>
+        private void AddBorderToCell(GameObject cell)
+        {
+            // 创建边框对象
+            GameObject border = new GameObject("Border");
+            border.transform.SetParent(cell.transform);
+            border.transform.localPosition = Vector3.zero;
+            border.transform.localScale = new Vector3(1.05f, 1.05f, 1f);
+            
+            // 添加LineRenderer组件
+            LineRenderer lineRenderer = border.AddComponent<LineRenderer>();
+            lineRenderer.positionCount = 5;
+            lineRenderer.useWorldSpace = false;
+            lineRenderer.widthMultiplier = 0.05f;
+            lineRenderer.startColor = Color.black;
+            lineRenderer.endColor = Color.black;
+            
+            // 设置边框顶点（正方形边框）
+            Vector3[] points = new Vector3[5];
+            points[0] = new Vector3(-0.5f, -0.5f, 0.1f);
+            points[1] = new Vector3(0.5f, -0.5f, 0.1f);
+            points[2] = new Vector3(0.5f, 0.5f, 0.1f);
+            points[3] = new Vector3(-0.5f, 0.5f, 0.1f);
+            points[4] = new Vector3(-0.5f, -0.5f, 0.1f); // 闭合
+            
+            lineRenderer.SetPositions(points);
+            
+            // 移除碰撞器，避免影响游戏逻辑
+            Collider collider = cell.GetComponent<Collider>();
+            if (collider != null)
+            {
+                Object.Destroy(collider);
+            }
+        }
+        
+        /// <summary>
+        /// 更新网格可视化（当格子类型改变时调用）
+        /// </summary>
+        public void UpdateGridVisual(int x, int y)
+        {
+            if (x >= 0 && x < m_Size && y >= 0 && y < m_Size && m_CellVisuals != null)
+            {
+                GameObject cell = m_CellVisuals[y, x];
+                if (cell != null)
+                {
+                    Renderer renderer = cell.GetComponent<Renderer>();
+                    if (renderer != null)
+                    {
+                        switch (m_Grid[y, x])
+                        {
+                            case 1: // 墙
+                                renderer.material.color = m_WallCellColor;
+                                break;
+                            case 4: // 饼干墙
+                                renderer.material.color = m_CrackerColor;
+                                break;
+                            default: // 空格子
+                                renderer.material.color = m_EmptyCellColor;
+                                break;
+                        }
+                    }
+                }
+            }
         }
 
         public void AddEntity(int id, int type, int x, int y)
         {
-            // 使用GameConstants中的默认生命值
-            int defaultHp = type == GameConstants.ENTITY_TYPE_PLAYER ? GameConstants.DEFAULT_PLAYER_HP : GameConstants.DEFAULT_ENEMY_HP;
-            m_Entities[id] = new JellyData { Id = id, Type = type, X = x, Y = y, Hp = defaultHp };
-        }
-        
-        /// <summary>
-        /// 将网格坐标转换为世界坐标
-        /// </summary>
-        public Vector3 GridToWorld(int x, int y)
-        {
-            // 计算中心点偏移
-            float offset = (m_Size - 1) * 0.5f * m_CellSize;
-            return new Vector3(x * m_CellSize - offset, 0, y * m_CellSize - offset);
-        }
-        
-        /// <summary>
-        /// 对实体造成伤害
-        /// </summary>
-        /// <param name="entityId">实体ID</param>
-        /// <param name="damage">伤害值</param>
-        /// <returns>是否造成致命伤害</returns>
-        public bool ApplyDamage(int entityId, int damage)
-        {
-            return ApplyDamage(entityId, damage, false);
-        }
-        
-        /// <summary>
-        /// 对实体造成伤害
-        /// </summary>
-        /// <param name="entityId">实体ID</param>
-        /// <param name="damage">伤害值</param>
-        /// <param name="isCrit">是否暴击</param>
-        /// <returns>是否造成致命伤害</returns>
-        public bool ApplyDamage(int entityId, int damage, bool isCrit)
-        {
-            if (!m_Entities.TryGetValue(entityId, out JellyData data) || data.IsDead)
-            {
-                Log.Warning("Entity {0} not found or already dead when applying damage", entityId);
-                return false;
-            }
-            
-            int actualDamage = damage;
-            
-            // 暴击伤害计算 - 使用GameConstants中的常量
-            if (isCrit)
-            {
-                actualDamage = Mathf.RoundToInt(damage * GameConstants.CRIT_DAMAGE_MULTIPLIER);
-            }
-            
-            data.Hp -= actualDamage;
-            
-            // 触发伤害事件，包含伤害数字和暴击效果
-            GameEntry.Event.Fire(this, DamageEventArgs.Create(entityId, actualDamage, isCrit));
-            
-            // 触发伤害反馈事件，用于显示伤害数字
-            if (GameEntry.Entity.TryGetEntity(entityId, out Entity entity))
-            {
-                DamageFeedbackEventArgs args = DamageFeedbackEventArgs.Create(entityId, actualDamage, isCrit, entity.CachedTransform.position);
-                GameEntry.Event.Fire(this, args);
-            }
-            
-            // 获取实体位置，用于播放特效
-            if (GameEntry.Entity.TryGetEntity(entityId, out Entity entity))
-            {
-                // 播放命中特效
-                EffectsManager.Instance.PlayHitEffect(entity.CachedTransform.position);
-            }
-            
-            bool isKilled = data.IsDead;
-            
-            if (isKilled)
-            {
-                // 触发死亡事件
-                GameEntry.Event.Fire(this, JellyKilledEventArgs.Create(entityId, data.Type));
-                
-                // 播放死亡特效
-                if (GameEntry.Entity.TryGetEntity(entityId, out Entity deadEntity))
-                {
-                    EffectsManager.Instance.PlayDeathEffect(deadEntity.CachedTransform.position);
-                }
-            }
-            
-            return isKilled;
-        }
-        
-        /// <summary>
-        /// 检查并处理陷阱伤害
-        /// </summary>
-        /// <param name="x">x坐标</param>
-        /// <param name="y">y坐标</param>
-        /// <returns>是否是陷阱</returns>
-        public bool CheckTrap(int x, int y)
-        {
-            if (x < 0 || x >= m_Size || y < 0 || y >= m_Size)
-                return false;
-                
-            return m_Grid[y, x] == GameConstants.MAP_CELL_TRAP;
-        }
-        
-        /// <summary>
-        /// 触发陷阱
-        /// </summary>
-        /// <param name="x">x坐标</param>
-        /// <param name="y">y坐标</param>
-        public void TriggerTrap(int x, int y)
-        {
-            if (x < 0 || x >= m_Size || y < 0 || y >= m_Size)
-                return;
-                
-            if (m_Grid[y, x] == GameConstants.MAP_CELL_TRAP)
-            {
-                // 获取陷阱的世界坐标
-                Vector3 worldPos = GridToWorld(x, y);
-                
-                // 播放陷阱特效和音效
-                EffectsManager.Instance.PlayTrapEffect(worldPos);
-                
-                // 这里可以设置陷阱在一定时间后重置
-                // StartCoroutine(ResetTrapAfterDelay(x, y, 2.0f));
-            }
-        }
-        
-        /// <summary>
-        /// 延迟重置陷阱协程
-        /// </summary>
-        private System.Collections.IEnumerator ResetTrapAfterDelay(int x, int y, float delay)
-        {
-            yield return new WaitForSeconds(delay);
-            if (x >= 0 && x < m_Size && y >= 0 && y < m_Size && m_Grid[y, x] == GameConstants.MAP_CELL_EMPTY)
-            {
-                m_Grid[y, x] = GameConstants.MAP_CELL_TRAP;
-            }
+            m_Entities[id] = new JellyData { Id = id, Type = type, X = x, Y = y, Hp = 3 };
         }
 
         // 核心算法：计算从 (startX, startY) 向 (dirX, dirY) 滑行的结果
@@ -215,22 +207,20 @@ namespace StarForce
                     break;
 
                 // 2. 静态墙壁检查
-            int cellType = m_Grid[nextY, nextX];
-            if (cellType == GameConstants.MAP_CELL_WALL) break; // 硬墙
-            if (cellType == GameConstants.MAP_CELL_CRACKER_WALL) 
-            {
-                // 撞到饼干墙
-                result.HitWallType = GameConstants.MAP_CELL_CRACKER_WALL;
+                int cellType = m_Grid[nextY, nextX];
+                if (cellType == 1) break; // 硬墙
+                if (cellType == 4) 
+                {
+                    // 撞到饼干墙
+                result.HitWallType = 4;
                 result.HitWallX = nextX;
                 result.HitWallY = nextY;
+                
+                // 移除饼干墙（破坏）
+                m_Grid[nextY, nextX] = 0;
+                // 更新可视化
+                UpdateGridVisual(nextX, nextY);
                 break; 
-            }
-            if (cellType == GameConstants.MAP_CELL_TRAP)
-                {
-                    // 碰到陷阱，记录但允许移动到陷阱上
-                    result.HitTrap = true;
-                    result.HitTrapX = nextX;
-                    result.HitTrapY = nextY;
                 }
 
                 // 3. 动态实体检查
@@ -248,20 +238,11 @@ namespace StarForce
 
             result.FinalX = currX;
             result.FinalY = currY;
-            
-            // 检查最终位置是否在陷阱上
-            if (!result.HitTrap && currX != startX && currY != startY)
-            {
-                result.HitTrap = CheckTrap(currX, currY);
-                result.HitTrapX = currX;
-                result.HitTrapY = currY;
-            }
-            
             return result;
         }
 
         public int GetEntityAt(int x, int y)
-        {            
+        {
             foreach (var kv in m_Entities)
             {
                 if (!kv.Value.IsDead && kv.Value.X == x && kv.Value.Y == y)
@@ -269,196 +250,16 @@ namespace StarForce
             }
             return -1;
         }
-        
-        /// <summary>
-        /// 更新实体位置
-        /// </summary>
-        public void UpdateEntityPosition(int entityId, int x, int y)
-        {            
-            if (m_Entities.TryGetValue(entityId, out JellyData data))
-            {
-                data.X = x;
-                data.Y = y;
-            }
-        }
-        
-        /// <summary>
-        /// 破坏墙壁
-        /// </summary>
-        /// <param name="x">x坐标</param>
-        /// <param name="y">y坐标</param>
-        /// <returns>是否成功破坏</returns>
-        public bool BreakWall(int x, int y)
-        {
-            if (x < 0 || x >= m_Size || y < 0 || y >= m_Size)
-                return false;
-                
-            if (m_Grid[y, x] == GameConstants.MAP_CELL_CRACKER_WALL)
-            {
-                // 获取墙壁的世界坐标
-                Vector3 worldPos = GridToWorld(x, y);
-                
-                // 播放墙壁破坏特效和音效
-                EffectsManager.Instance.PlayWallBreakEffect(worldPos);
-                
-                // 更新地图数据
-                m_Grid[y, x] = GameConstants.MAP_CELL_EMPTY;
-                Log.Info($"Wall broken at ({x}, {y})");
-                
-                // 触发墙壁破坏事件
-                GameEntry.Event.Fire(this, WallBrokenEventArgs.Create(x, y));
-                return true;
-            }
-            
-            return false;
-        }
-        
-        /// <summary>
-        /// 获取当前关卡的敌人数量
-        /// </summary>
-        public int GetEnemyCount()
-        {
-            int count = 0;
-            foreach (var data in m_Entities.Values)
-            {
-                if (!data.IsDead && data.Type == 1)
-                    count++;
-            }
-            return count;
-        }
-        
-        /// <summary>
-        /// 检查关卡是否胜利
-        /// </summary>
-        public bool CheckWinCondition()
-        {
-            return GetEnemyCount() == 0;
-        }
-        
-        /// <summary>
-        /// 检查关卡是否失败
-        /// </summary>
-        public bool CheckLoseCondition()
-        {
-            foreach (var data in m_Entities.Values)
-            {
-                if (data.Type == 0 && !data.IsDead) // 有玩家存活
-                    return false;
-            }
-            return true;
-        }
-        
-        /// <summary>
-        /// 获取所有玩家实体
-        /// </summary>
-        public List<int> GetAllPlayers()
-        {
-            List<int> players = new List<int>();
-            foreach (var kv in m_Entities)
-            {
-                if (!kv.Value.IsDead && kv.Value.Type == 0)
-                    players.Add(kv.Key);
-            }
-            return players;
-        }
-        
-        /// <summary>
-        /// 获取所有敌人实体
-        /// </summary>
-        public List<int> GetAllEnemies()
-        {
-            List<int> enemies = new List<int>();
-            foreach (var kv in m_Entities)
-            {
-                if (!kv.Value.IsDead && kv.Value.Type == 1)
-                    enemies.Add(kv.Key);
-            }
-            return enemies;
-        }
-        
-        /// <summary>
-        /// 检查实体是否激活
-        /// </summary>
-        public bool IsEntityActive(int entityId)
-        {
-            return m_Entities.ContainsKey(entityId) && !m_Entities[entityId].IsDead;
-        }
-        
-        /// <summary>
-        /// 获取所有玩家的位置
-        /// </summary>
-        public List<Vector2Int> GetPlayerPositions()
-        {
-            List<Vector2Int> positions = new List<Vector2Int>();
-            foreach (var kv in m_Entities)
-            {
-                if (!kv.Value.IsDead && kv.Value.Type == 0)
-                {
-                    positions.Add(new Vector2Int(kv.Value.X, kv.Value.Y));
-                }
-            }
-            return positions;
-        }
-        
-        /// <summary>
-        /// 检查实体是否可以移动到指定位置
-        /// </summary>
-        public bool CanEntityMove(int entityId, Vector2Int newPos)
-        {
-            // 检查边界
-            if (newPos.x < 0 || newPos.x >= m_Size || newPos.y < 0 || newPos.y >= m_Size)
-            {
-                return false;
-            }
-            
-            // 检查是否有障碍物
-            int cellType = m_Grid[newPos.y, newPos.x];
-            if (cellType == GameConstants.MAP_CELL_WALL)
-            {
-                return false;
-            }
-            
-            // 检查是否有其他实体
-            int existingEntity = GetEntityAt(newPos.x, newPos.y);
-            if (existingEntity != -1 && existingEntity != entityId)
-            {
-                return false;
-            }
-            
-            return true;
-        }
-        
-        /// <summary>
-        /// 获取从一个位置到另一个位置的方向
-        /// </summary>
-        public Vector2Int GetDirection(int fromX, int fromY, int toX, int toY)
-        {
-            int dx = toX - fromX;
-            int dy = toY - fromY;
-            
-            // 优先选择绝对值较大的方向
-            if (Mathf.Abs(dx) > Mathf.Abs(dy))
-            {
-                return new Vector2Int(dx > 0 ? 1 : -1, 0);
-            }
-            else
-            {
-                return new Vector2Int(0, dy > 0 ? 1 : -1);
-            }
-        }
-        
-        /// <summary>
-        /// 获取两个位置之间的曼哈顿距离
-        /// </summary>
-        public int GetManhattanDistance(int x1, int y1, int x2, int y2)
-        {
-            return Mathf.Abs(x1 - x2) + Mathf.Abs(y1 - y2);
-        }
 
         public Vector3 GridToWorld(int x, int y)
         {
-            // 假设格子大小为 1.5 单位，原点在左下角
-            return new Vector3(x * 1.5f, y * 1.5f, 0);
+            // 根据网格大小和偏移量计算世界坐标
+            float offsetX = -(m_Size - 1) * m_CellSize * 0.5f;
+            float offsetY = -(m_Size - 1) * m_CellSize * 0.5f;
+            return new Vector3(
+                x * m_CellSize + offsetX,
+                y * m_CellSize + offsetY,
+                0f);
         }
 
         // 简单的伤害处理
@@ -469,6 +270,22 @@ namespace StarForce
                 data.Hp -= dmg;
                 if (data.Hp <= 0) Log.Info($"Entity {entityId} Died.");
             }
+        }
+        
+        /// <summary>
+        /// 清理地图资源
+        /// </summary>
+        public void Cleanup()
+        {
+            if (m_GridVisualRoot != null)
+            {
+                Object.Destroy(m_GridVisualRoot);
+                m_GridVisualRoot = null;
+            }
+            
+            m_CellVisuals = null;
+            m_Entities.Clear();
+            m_Grid = null;
         }
     }
 

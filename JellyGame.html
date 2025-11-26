@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>果冻滑溜大冒险 Jelly Slide</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700&display=swap');
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #FFF5F7;
+            overflow: hidden; /* Prevent scroll on mobile */
+            touch-action: none;
+        }
+
+        h1, h2, .font-cute {
+            font-family: 'Fredoka One', cursive;
+        }
+
+        /* 棋盘格子背景 */
+        .grid-bg {
+            background-image: radial-gradient(#FFC0CB 20%, transparent 20%), radial-gradient(#FFC0CB 20%, transparent 20%);
+            background-color: #FFF0F5;
+            background-position: 0 0, 10px 10px;
+            background-size: 20px 20px;
+        }
+
+        /* 实体通用样式 */
+        .entity {
+            transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.2s;
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1), inset 0 -4px 4px rgba(0,0,0,0.1);
+        }
+
+        /* 果冻呼吸动画 */
+        @keyframes breathe {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .jelly-anim {
+            animation: breathe 2s infinite ease-in-out;
+        }
+
+        /* 玩家果冻 */
+        .player-unit {
+            background: linear-gradient(135deg, #4ADE80, #22C55E);
+            border-radius: 40%;
+            border: 3px solid #15803d;
+            z-index: 10;
+        }
+        
+        /* 敌人 */
+        .enemy-unit {
+            background: linear-gradient(135deg, #F87171, #DC2626);
+            border-radius: 30% 30% 45% 45%;
+            border: 3px solid #991B1B;
+            z-index: 9;
+        }
+
+        /* 墙壁 (不可破坏) */
+        .wall-unit {
+            background: #9CA3AF;
+            border-radius: 8px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+        }
+        
+        /* 饼干墙 (可破坏) - NEW */
+        .cracker-unit {
+            background: repeating-linear-gradient(
+              45deg,
+              #D97706,
+              #D97706 5px,
+              #B45309 5px,
+              #B45309 10px
+            );
+            border-radius: 8px;
+            border: 2px dashed #78350F;
+            z-index: 8;
+        }
+        
+        .cracker-broken {
+            animation: crumble 0.3s forwards;
+        }
+        
+        @keyframes crumble {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1) rotate(10deg); }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        /* 陷阱/刺 */
+        .trap-unit {
+            background: #FCD34D;
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        /* 伤害数字弹出 */
+        .damage-popup {
+            position: absolute;
+            color: #EF4444;
+            font-weight: 900;
+            font-size: 1.5rem;
+            animation: floatUp 0.8s forwards;
+            pointer-events: none;
+            z-index: 50;
+            text-shadow: 2px 2px 0 #FFF;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(0.5); opacity: 0; }
+            20% { transform: translateY(-10px) scale(1.2); opacity: 1; }
+            100% { transform: translateY(-30px) scale(1); opacity: 0; }
+        }
+
+        /* 选中高亮 */
+        .selected-ring {
+            box-shadow: 0 0 0 4px #FBBF24;
+        }
+
+        /* 胜利动画 */
+        @keyframes popIn {
+            0% { transform: scale(0); }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .modal-content {
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* UI Panel */
+        .game-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(4px);
+            border: 4px solid #F472B6;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center select-none text-slate-700">
+
+    <!-- 游戏 UI 头部 -->
+    <div class="w-full max-w-md px-4 mb-2 flex justify-between items-end">
+        <div>
+            <h1 class="text-3xl text-pink-500 drop-shadow-sm">果冻花园</h1>
+            <p class="text-sm text-slate-500 font-bold">第 <span id="level-display">1</span> 关</p>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="game.resetLevel()" class="bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded-full shadow-lg active:scale-95 transition">
+                ↺ 重玩
+            </button>
+        </div>
+    </div>
+
+    <!-- 游戏区域容器 -->
+    <div class="relative game-panel p-2 shadow-2xl">
+        <!-- 游戏棋盘 -->
+        <div id="game-board" class="relative grid-bg rounded-xl overflow-hidden touch-none" 
+             style="width: 320px; height: 320px;">
+            <!-- 动态生成的格子将放在这里 -->
+        </div>
+
+        <!-- 提示层 -->
+        <div id="tutorial-text" class="absolute bottom-4 left-0 w-full text-center pointer-events-none">
+            <span class="bg-white/80 px-3 py-1 rounded-full text-sm font-bold text-pink-600 shadow-sm border border-pink-200">
+                拖动绿色果冻去撞坏蛋！
+            </span>
+        </div>
+    </div>
+
+    <!-- 底部状态 -->
+    <div class="mt-4 text-center max-w-xs">
+        <p class="text-slate-600 text-sm font-semibold">技巧：棕色条纹的是“饼干墙”，撞一下就碎！🍪</p>
+    </div>
+
+    <!-- 胜利弹窗 -->
+    <div id="win-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div class="modal-content bg-white p-6 rounded-3xl shadow-2xl text-center max-w-sm mx-4 border-4 border-green-400">
+            <div class="text-6xl mb-2">🌟</div>
+            <h2 class="text-2xl text-green-600 mb-2">太棒了！</h2>
+            <p class="text-gray-600 mb-6">花园变得更干净了！</p>
+            <button onclick="game.nextLevel()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg text-lg active:scale-95 transition">
+                下一关 ➔
+            </button>
+        </div>
+    </div>
+
+    <!-- 失败弹窗 -->
+    <div id="loss-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div class="modal-content bg-white p-6 rounded-3xl shadow-2xl text-center max-w-sm mx-4 border-4 border-red-400">
+            <div class="text-6xl mb-2">😢</div>
+            <h2 class="text-2xl text-red-500 mb-2">哎呀！</h2>
+            <p class="text-gray-600 mb-6">果冻们都晕倒了...</p>
+            <button onclick="game.resetLevel()" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg text-lg active:scale-95 transition">
+                再试一次 ↺
+            </button>
+        </div>
+    </div>
+
+<script>
+/**
+ * 游戏核心逻辑
+ */
+class Game {
+    constructor() {
+        this.boardSize = 6; // 6x6 网格
+        this.cellSize = 320 / this.boardSize; // 动态计算格子大小
+        this.boardEl = document.getElementById('game-board');
+        this.currentLevelIdx = 0;
+        this.state = null;
+        this.isAnimating = false;
+        
+        // 关卡设计
+        // 0: 空, 1: 墙(硬), 2: 玩家(HP:3), 3: 敌人(HP:2), 4: 饼干墙(软, 可破坏)
+        this.levels = [
+            {
+                map: [
+                    [1,1,1,1,1,1],
+                    [1,0,0,0,0,1],
+                    [1,0,2,0,3,1],
+                    [1,0,0,0,0,1],
+                    [1,0,0,0,0,1],
+                    [1,1,1,1,1,1]
+                ],
+                msg: "按住绿色果冻，向右滑动撞击红色坏蛋！",
+                enemyHp: 2
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1],
+                    [1,3,0,0,0,1],
+                    [1,0,0,1,0,1],
+                    [1,0,0,1,0,1],
+                    [1,0,0,2,0,1],
+                    [1,1,1,1,1,1]
+                ],
+                msg: "利用墙壁！把敌人撞到墙上会造成大伤害。",
+                enemyHp: 3 
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1],
+                    [1,3,0,0,3,1],
+                    [1,0,0,1,0,1],
+                    [1,0,2,0,0,1],
+                    [1,0,2,0,0,1],
+                    [1,1,1,1,1,1]
+                ],
+                msg: "连击策略！用一个果冻去撞另一个果冻来调整位置。",
+                enemyHp: 3
+            },
+            // Level 4: 饼干墙介绍
+            {
+                map: [
+                    [1,1,1,1,1,1],
+                    [1,1,3,1,0,1],
+                    [1,4,4,4,0,1],
+                    [1,0,2,0,0,1],
+                    [1,0,0,0,0,1],
+                    [1,1,1,1,1,1]
+                ],
+                msg: "新机制：撞击条纹饼干墙可以破坏它们！",
+                enemyHp: 2
+            },
+            // Level 5: 综合运用
+            {
+                map: [
+                    [1,1,1,1,1,1],
+                    [1,3,4,3,0,1],
+                    [1,4,1,4,0,1],
+                    [1,0,0,0,0,1],
+                    [1,0,2,0,2,1],
+                    [1,1,1,1,1,1]
+                ],
+                msg: "先开路，再杀敌！小心别把敌人撞进死胡同。",
+                enemyHp: 3
+            }
+        ];
+
+        this.setupInput();
+        this.loadLevel(0);
+    }
+
+    loadLevel(idx) {
+        if (idx >= this.levels.length) {
+            alert("Demo 关卡全部完成！期待完整版吧！");
+            idx = 0;
+        }
+        this.currentLevelIdx = idx;
+        document.getElementById('level-display').innerText = idx + 1;
+        document.getElementById('tutorial-text').querySelector('span').innerText = this.levels[idx].msg;
+        document.getElementById('win-modal').classList.add('hidden');
+        document.getElementById('loss-modal').classList.add('hidden');
+
+        // 初始化状态
+        const levelData = this.levels[idx];
+        this.state = {
+            entities: [], // {id, type, x, y, hp, maxHp}
+            map: JSON.parse(JSON.stringify(levelData.map)) // Deep copy grid layout
+        };
+
+        // 解析地图生成实体
+        let idCounter = 0;
+        for(let y=0; y<this.boardSize; y++) {
+            for(let x=0; x<this.boardSize; x++) {
+                const type = this.state.map[y][x];
+                if (type === 2) { // Player
+                    this.state.entities.push({id: idCounter++, type: 'player', x, y, hp: 3, maxHp: 3});
+                    this.state.map[y][x] = 0;
+                } else if (type === 3) { // Enemy
+                    this.state.entities.push({id: idCounter++, type: 'enemy', x, y, hp: levelData.enemyHp, maxHp: levelData.enemyHp});
+                    this.state.map[y][x] = 0;
+                } else if (type === 4) { // Cracker Wall (Entity-like wall, but managed in map logic for simplicity of rendering, let's treat as map for now but destructible)
+                    // 保持为 map 元素，但在物理计算时特殊处理
+                }
+            }
+        }
+
+        this.render();
+    }
+
+    render() {
+        this.boardEl.innerHTML = ''; // Clear
+
+        // 渲染静态地图
+        for(let y=0; y<this.boardSize; y++) {
+            for(let x=0; x<this.boardSize; x++) {
+                const cellType = this.state.map[y][x];
+                if (cellType === 1) {
+                    this.createDiv(x, y, 'wall-unit');
+                } else if (cellType === 4) {
+                    const el = this.createDiv(x, y, 'cracker-unit');
+                    el.id = `cell-${x}-${y}`; // Give ID for animation
+                }
+            }
+        }
+
+        // 渲染实体
+        this.state.entities.forEach(ent => {
+            const el = this.createDiv(ent.x, ent.y, ent.type === 'player' ? 'player-unit' : 'enemy-unit');
+            el.id = `ent-${ent.id}`;
+            el.classList.add('jelly-anim');
+            
+            // HP Bar
+            if (ent.hp < ent.maxHp) {
+                const hpBar = document.createElement('div');
+                hpBar.className = 'absolute -top-2 left-0 w-full h-1 bg-gray-300 rounded overflow-hidden';
+                const hpFill = document.createElement('div');
+                hpFill.className = 'h-full bg-green-500';
+                hpFill.style.width = (ent.hp / ent.maxHp * 100) + '%';
+                if(ent.type === 'enemy') hpFill.className = 'h-full bg-red-500';
+                hpBar.appendChild(hpFill);
+                el.appendChild(hpBar);
+            }
+            
+            // Face
+            const face = document.createElement('div');
+            face.className = 'text-white text-lg pointer-events-none';
+            face.innerText = ent.type === 'player' ? 'OwO' : 'ÒnÓ';
+            el.appendChild(face);
+        });
+    }
+
+    createDiv(x, y, className) {
+        const div = document.createElement('div');
+        div.className = `entity ${className}`;
+        div.style.width = (this.cellSize - 4) + 'px';
+        div.style.height = (this.cellSize - 4) + 'px';
+        div.style.left = (x * this.cellSize + 2) + 'px';
+        div.style.top = (y * this.cellSize + 2) + 'px';
+        this.boardEl.appendChild(div);
+        return div;
+    }
+
+    setupInput() {
+        let startX, startY, selectedEntId = null;
+
+        const handleStart = (x, y) => {
+            if (this.isAnimating) return;
+            const rect = this.boardEl.getBoundingClientRect();
+            const gridX = Math.floor((x - rect.left) / this.cellSize);
+            const gridY = Math.floor((y - rect.top) / this.cellSize);
+            
+            const ent = this.state.entities.find(e => e.x === gridX && e.y === gridY && e.type === 'player');
+            if (ent) {
+                selectedEntId = ent.id;
+                startX = x;
+                startY = y;
+                const el = document.getElementById(`ent-${ent.id}`);
+                if(el) el.classList.add('selected-ring');
+            }
+        };
+
+        const handleEnd = (x, y) => {
+            if (selectedEntId === null || this.isAnimating) return;
+            
+            const el = document.getElementById(`ent-${selectedEntId}`);
+            if(el) el.classList.remove('selected-ring');
+
+            const dx = x - startX;
+            const dy = y - startY;
+            
+            if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
+                let dirX = 0, dirY = 0;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    dirX = dx > 0 ? 1 : -1;
+                } else {
+                    dirY = dy > 0 ? 1 : -1;
+                }
+                this.executeMove(selectedEntId, dirX, dirY);
+            }
+            selectedEntId = null;
+        };
+
+        this.boardEl.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
+        window.addEventListener('mouseup', e => handleEnd(e.clientX, e.clientY));
+        this.boardEl.addEventListener('touchstart', e => {
+            handleStart(e.touches[0].clientX, e.touches[0].clientY);
+        }, {passive: false});
+        window.addEventListener('touchend', e => {
+            if(e.changedTouches.length > 0)
+                handleEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+        });
+    }
+
+    async executeMove(entId, dx, dy) {
+        this.isAnimating = true;
+        
+        const mover = this.state.entities.find(e => e.id === entId);
+        if (!mover) return;
+
+        await this.slideUnit(mover, dx, dy, true);
+        this.checkGameState();
+        
+        if (!this.checkWinCondition()) {
+             await new Promise(r => setTimeout(r, 300));
+             await this.enemyTurn();
+             this.checkGameState();
+        }
+
+        this.isAnimating = false;
+        this.render(); // Re-render needed for broken walls update
+    }
+
+    async slideUnit(unit, dx, dy, isPlayerInitiated) {
+        let moved = false;
+        
+        while(true) {
+            const nextX = unit.x + dx;
+            const nextY = unit.y + dy;
+
+            // 1. 边界检查
+            if (nextX < 0 || nextX >= this.boardSize || nextY < 0 || nextY >= this.boardSize) break;
+
+            // 2. 静态地图检查
+            const cellType = this.state.map[nextY][nextX];
+            if (cellType === 1) { // 撞硬墙
+                break;
+            }
+            if (cellType === 4) { // 撞饼干墙
+                // 动画：破坏墙壁
+                const wallEl = document.getElementById(`cell-${nextX}-${nextY}`);
+                if (wallEl) {
+                    wallEl.classList.add('cracker-broken');
+                    // 震动玩家
+                    const pEl = document.getElementById(`ent-${unit.id}`);
+                    if (pEl) {
+                        pEl.style.transform = `translate(${dx*5}px, ${dy*5}px)`;
+                        setTimeout(() => pEl.style.transform = 'scale(1)', 100);
+                    }
+                }
+                // 逻辑：消除墙壁
+                this.state.map[nextY][nextX] = 0;
+                await new Promise(r => setTimeout(r, 200)); // 停顿一下
+                break; // 撞破后停下，不能继续滑
+            }
+
+            // 3. 实体碰撞检查
+            const blocker = this.state.entities.find(e => e.x === nextX && e.y === nextY && e.id !== unit.id);
+            if (blocker) {
+                await this.handleCollision(unit, blocker, dx, dy);
+                return; 
+            }
+
+            // 4. 移动一步
+            unit.x = nextX;
+            unit.y = nextY;
+            moved = true;
+            this.updateEntityPosition(unit);
+            await new Promise(r => setTimeout(r, 50)); 
+        }
+    }
+
+    async handleCollision(attacker, victim, dirX, dirY) {
+        const attEl = document.getElementById(`ent-${attacker.id}`);
+        const vicEl = document.getElementById(`ent-${victim.id}`);
+        
+        if(attEl) {
+            attEl.style.transform = `translate(${dirX*10}px, ${dirY*10}px)`;
+            setTimeout(() => attEl.style.transform = 'scale(1)', 100);
+        }
+
+        let damage = 0;
+        
+        if (attacker.type !== victim.type) {
+            damage = 1;
+            this.showDamage(victim, 1);
+            
+            const kbX = victim.x + dirX;
+            const kbY = victim.y + dirY;
+            
+            let hitSolid = false;
+            
+            // 击飞逻辑检查：包括边界、硬墙(1)、饼干墙(4)
+            if (kbX < 0 || kbX >= this.boardSize || kbY < 0 || kbY >= this.boardSize) {
+                hitSolid = true;
+            } else {
+                const cell = this.state.map[kbY][kbX];
+                if (cell === 1 || cell === 4) hitSolid = true;
+            }
+
+            if (hitSolid) {
+                damage += 1;
+                this.showDamage(victim, "CRIT!", true);
+                if(vicEl) vicEl.style.transform = `scale(0.8)`;
+            } else {
+                const existingEnt = this.state.entities.find(e => e.x === kbX && e.y === kbY);
+                if (!existingEnt) {
+                    victim.x = kbX;
+                    victim.y = kbY;
+                    this.updateEntityPosition(victim);
+                }
+            }
+        } 
+        else if (attacker.type === victim.type) {
+            await this.slideUnit(victim, dirX, dirY, false);
+        }
+
+        victim.hp -= damage;
+        if (victim.hp <= 0) {
+            this.killEntity(victim);
+        }
+    }
+
+    updateEntityPosition(ent) {
+        const el = document.getElementById(`ent-${ent.id}`);
+        if (el) {
+            el.style.left = (ent.x * this.cellSize + 2) + 'px';
+            el.style.top = (ent.y * this.cellSize + 2) + 'px';
+        }
+    }
+
+    showDamage(ent, amount, isCrit = false) {
+        const el = document.getElementById(`ent-${ent.id}`);
+        if (!el) return;
+        
+        const popup = document.createElement('div');
+        popup.className = 'damage-popup';
+        popup.innerText = isCrit ? `💥${amount}` : `-${amount}`;
+        if (isCrit) popup.style.transform = 'scale(1.5)';
+        
+        el.appendChild(popup);
+        setTimeout(() => popup.remove(), 800);
+    }
+
+    killEntity(ent) {
+        const el = document.getElementById(`ent-${ent.id}`);
+        if (el) {
+            el.style.transform = 'scale(0)';
+            el.style.opacity = '0';
+            setTimeout(() => el.remove(), 300);
+        }
+        this.state.entities = this.state.entities.filter(e => e.id !== ent.id);
+    }
+
+    async enemyTurn() {
+        const enemies = this.state.entities.filter(e => e.type === 'enemy');
+        const players = this.state.entities.filter(e => e.type === 'player');
+        if (players.length === 0) return;
+
+        for (let enemy of enemies) {
+            let target = players[0];
+            let minDist = 999;
+            
+            for (let p of players) {
+                const d = Math.abs(p.x - enemy.x) + Math.abs(p.y - enemy.y);
+                if (d < minDist) {
+                    minDist = d;
+                    target = p;
+                }
+            }
+            let dx = 0, dy = 0;
+            if (Math.abs(target.x - enemy.x) > Math.abs(target.y - enemy.y)) {
+                dx = target.x > enemy.x ? 1 : -1;
+            } else {
+                dy = target.y > enemy.y ? 1 : -1;
+            }
+            await this.slideUnit(enemy, dx, dy, false);
+            await new Promise(r => setTimeout(r, 200)); 
+        }
+    }
+
+    checkWinCondition() {
+        return this.state.entities.filter(e => e.type === 'enemy').length === 0;
+    }
+
+    checkGameState() {
+        const enemies = this.state.entities.filter(e => e.type === 'enemy');
+        const players = this.state.entities.filter(e => e.type === 'player');
+
+        if (enemies.length === 0) {
+            setTimeout(() => {
+                document.getElementById('win-modal').classList.remove('hidden');
+            }, 500);
+        } else if (players.length === 0) {
+            setTimeout(() => {
+                document.getElementById('loss-modal').classList.remove('hidden');
+            }, 500);
+        }
+    }
+
+    nextLevel() {
+        this.loadLevel(this.currentLevelIdx + 1);
+    }
+
+    resetLevel() {
+        this.loadLevel(this.currentLevelIdx);
+    }
+}
+
+const game = new Game();
+</script>
+</body>
+</html>
