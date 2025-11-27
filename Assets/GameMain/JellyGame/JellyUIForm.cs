@@ -5,44 +5,57 @@ using DG.Tweening;
 
 namespace StarForce
 {
-    public class JellyUIForm : UIFormLogic
+    public class JellyUIForm : UGuiForm
     {
         private Text m_LevelText;
         private Button m_ResetButton;
-        private Button m_NextLevelButton; // New Button
+        private Button m_NextLevelButton;
         private Transform m_DamageNumberRoot;
-        
-        // 简单的对象池或直接实例化
         private GameObject m_DamageNumberTemplate;
 
+#if UNITY_2017_3_OR_NEWER
         protected override void OnInit(object userData)
+#else
+        protected internal override void OnInit(object userData)
+#endif
         {
             base.OnInit(userData);
             
-            m_LevelText = transform.Find("LevelText").GetComponent<Text>();
-            m_ResetButton = transform.Find("ResetButton").GetComponent<Button>();
-            m_NextLevelButton = transform.Find("NextLevelButton").GetComponent<Button>(); // Find button
-            m_DamageNumberRoot = transform.Find("DamageNumbers");
+            m_LevelText = transform.Find("Panel/LevelText").GetComponent<Text>();
+            m_ResetButton = transform.Find("Panel/ResetButton").GetComponent<Button>();
+            m_NextLevelButton = transform.Find("Panel/NextLevelButton").GetComponent<Button>();
+            m_DamageNumberRoot = transform.Find("Panel/DamageNumbers");
+            m_DamageNumberTemplate = transform.Find("Panel/DamageNumberTemplate").gameObject;
             
-            // 假设有一个模板在 UI 下
-            m_DamageNumberTemplate = transform.Find("DamageNumberTemplate").gameObject;
             m_DamageNumberTemplate.SetActive(false);
             
             m_ResetButton.onClick.AddListener(OnResetButtonClick);
-            m_NextLevelButton.onClick.AddListener(OnNextLevelButtonClick); // Add listener
-            m_NextLevelButton.gameObject.SetActive(false); // Hide initially
+            m_NextLevelButton.onClick.AddListener(OnNextLevelButtonClick);
+            m_NextLevelButton.gameObject.SetActive(false);
         }
 
+#if UNITY_2017_3_OR_NEWER
         protected override void OnOpen(object userData)
+#else
+        protected internal override void OnOpen(object userData)
+#endif
         {
             base.OnOpen(userData);
-            // UpdateLevelDisplay(1); // Removed hardcoded level
+            Log.Info("JellyUIForm OnOpen called.");
             m_NextLevelButton.gameObject.SetActive(false);
+        }
+
+#if UNITY_2017_3_OR_NEWER
+        protected override void OnClose(bool isShutdown, object userData)
+#else
+        protected internal override void OnClose(bool isShutdown, object userData)
+#endif
+        {
+            base.OnClose(isShutdown, userData);
         }
 
         private void OnResetButtonClick()
         {
-            // 重置当前关卡
             Log.Info("Reset Level");
             GameEntry.Event.Fire(this, ResetLevelEventArgs.Create());
         }
@@ -55,7 +68,11 @@ namespace StarForce
 
         public void ShowWinUI()
         {
-            m_NextLevelButton.gameObject.SetActive(true);
+            Log.Info("JellyUIForm.ShowWinUI called.");
+            if (m_NextLevelButton != null)
+            {
+                m_NextLevelButton.gameObject.SetActive(true);
+            }
         }
 
         public void UpdateLevelDisplay(int level)
@@ -73,9 +90,7 @@ namespace StarForce
             GameObject go = Instantiate(m_DamageNumberTemplate, m_DamageNumberRoot);
             go.SetActive(true);
             
-            // 世界坐标转 UI 坐标
             Vector2 screenPos = Camera.main.WorldToScreenPoint(worldPos);
-            // 简单的转换，如果 Canvas 是 ScreenSpaceOverlay
             go.transform.position = screenPos;
 
             Text text = go.GetComponent<Text>();
@@ -83,7 +98,6 @@ namespace StarForce
             text.color = isCrit ? Color.red : Color.white;
             text.fontSize = isCrit ? 40 : 24;
 
-            // 动画
             go.transform.DOMoveY(go.transform.position.y + 100, 0.5f).OnComplete(() => Destroy(go));
             text.DOFade(0, 0.5f);
         }
