@@ -18,6 +18,8 @@ namespace StarForce
         
         private bool m_IsPlayerTurn = true;
         private bool m_IsAnimating = false;
+        private JellyUIForm m_UIForm;
+        private int m_UIFormId;
         
         // 简单的输入记录
         private Vector2 m_TouchStartPos;
@@ -26,34 +28,54 @@ namespace StarForce
         // 地图相关配置
         private const float CELL_SIZE = 1.5f; // 与MapManager保持一致
 
+        private int m_CurrentLevelIndex = 1;
+        private const int MAX_LEVEL = 5;
+
         protected override void OnEnter(ProcedureOwner procedureOwner)
         {
             base.OnEnter(procedureOwner);
             m_IsPlayerTurn = true;
             m_IsAnimating = false;
+            m_CurrentLevelIndex = 1;
 
-            // 1. 初始化地图数据 (Demo硬编码，实际应从 DataTable 读取)
-            int[,] map = new int[6, 6] {
-                {1,1,1,1,1,1},
-                {1,0,0,0,0,1},
-                {1,0,2,0,3,1}, // 2:Player, 3:Enemy
-                {1,0,4,0,0,1}, // 4:Cracker
-                {1,0,0,0,0,1},
-                {1,1,1,1,1,1}
-            };
-            
-            MapManager.Instance.InitLevel(map);
+            // 1. 初始化地图数据
+            LoadCurrentLevel();
 
-            // 2. 生成实体 (需要在 EntityGroup 中配置好 "Jelly" 组)
-            // 这里的 EntityId 100 是玩家, 200 是敌人
-            MapManager.Instance.AddEntity(100, 0, 2, 2); 
-            GameEntry.Entity.ShowEntity(100, typeof(JellyLogic), "Assets/GameMain/Entities/Jelly.prefab", "JellyGroup", MapManager.Instance.m_Entities[100]);
-
-            MapManager.Instance.AddEntity(200, 1, 4, 2);
-            GameEntry.Entity.ShowEntity(200, typeof(JellyLogic), "Assets/GameMain/Entities/Jelly.prefab", "JellyGroup", MapManager.Instance.m_Entities[200]);
+            // 打开 UI
+            m_UIFormId = (int)GameEntry.UI.OpenUIForm("Assets/GameMain/UI/JellyUIForm.prefab", "Default");
 
             // 订阅事件
             GameEntry.Event.Subscribe(JellyMoveCompleteEventArgs.EventId, OnJellyMoveComplete);
+            GameEntry.Event.Subscribe(OpenUIFormSuccessEventArgs.EventId, OnOpenUIFormSuccess);
+            GameEntry.Event.Subscribe(ResetLevelEventArgs.EventId, OnResetLevel);
+            GameEntry.Event.Subscribe(NextLevelEventArgs.EventId, OnNextLevel);
+        }
+        
+        private void LoadCurrentLevel()
+        {
+            MapManager.Instance.Cleanup();
+            LevelLoader.LoadLevel(m_CurrentLevelIndex);
+            if (m_UIForm != null)
+            {
+                m_UIForm.UpdateLevelDisplay(m_CurrentLevelIndex);
+            }
+        }
+
+        private void OnResetLevel(object sender, GameEventArgs e)
+        {
+            LoadCurrentLevel();
+            m_IsPlayerTurn = true;
+        }
+
+        private void OnNextLevel(object sender, GameEventArgs e)
+        {
+            m_CurrentLevelIndex++;
+            if (m_CurrentLevelIndex > MAX_LEVEL)
+            {
+                m_CurrentLevelIndex = 1; // Loop back or show end screen
+            }
+            LoadCurrentLevel();
+            m_IsPlayerTurn = true;
         }
 
         protected override void OnUpdate(ProcedureOwner procedureOwner, float elapseSeconds, float realElapseSeconds)
@@ -68,9 +90,29 @@ namespace StarForce
         protected override void OnLeave(ProcedureOwner procedureOwner, bool isShutdown)
         {
             GameEntry.Event.Unsubscribe(JellyMoveCompleteEventArgs.EventId, OnJellyMoveComplete);
+            GameEntry.Event.Unsubscribe(OpenUIFormSuccessEventArgs.EventId, OnOpenUIFormSuccess);
+            GameEntry.Event.Unsubscribe(ResetLevelEventArgs.EventId, OnResetLevel);
+            GameEntry.Event.Unsubscribe(NextLevelEventArgs.EventId, OnNextLevel);
+            
+            if (m_UIForm != null)
+            {
+                GameEntry.UI.CloseUIForm(m_UIForm.UIForm);
+                m_UIForm = null;
+            }
+
             // 调用MapManager的清理方法
             MapManager.Instance.Cleanup();
             base.OnLeave(procedureOwner, isShutdown);
+        }
+
+        private void OnOpenUIFormSuccess(object sender, GameEventArgs e)
+        {
+            OpenUIFormSuccessEventArgs ne = (OpenUIFormSuccessEventArgs)e;
+            if (ne.UserData == null && ne.UIForm.Logic is JellyUIForm form)
+            {
+                m_UIForm = form;
+                m_UIForm.UpdateLevelDisplay(m_CurrentLevelIndex);
+            }
         }
         
         /// <summary>
@@ -130,6 +172,47 @@ namespace StarForce
                         MapManager.Instance.ApplyDamage(result.HitEntityId, 1);
                         var victim = GameEntry.Entity.GetEntity(result.HitEntityId)?.Logic as JellyLogic;
                         victim?.PlayHitAnimation();
+                        
+                        // UI 飘字
+                        if (m_UIForm != null && victim != null)
+                        {
+                            m_UIForm.ShowDamageNumber(victim.transform.position, 1, false);
+                        }
+
+                        // 击退逻辑
+                        bool wallSlam = MapManager.Instance.ApplyKnockback(result.HitEntityId, dx, dy);
+                        
+                        // 更新受害者位置 (视觉)
+                        if (MapManager.Instance.m_Entities.TryGetValue(result.HitEntityId, out JellyData victimData))
+                        {
+                            // 立即更新位置，或者播放击退动画 (这里简化为立即更新)
+                            // 注意：我们需要找到受害者的 EntityLogic
+                            var victimLogic = GameEntry.Entity.GetEntity(result.HitEntityId)?.Logic as JellyLogic;
+                            if (victimLogic != null)
+                            {
+                                victimLogic.transform.position = MapManager.Instance.GridToWorld(victimData.X, victimData.Y);
+                            }
+                        }
+
+                        if (wallSlam)
+                        {
+                            // 撞墙暴击
+                            Log.Info("Wall Slam! Critical Damage!");
+                            MapManager.Instance.ApplyDamage(result.HitEntityId, 1); // 额外1点伤害
+                            victim?.PlayHitAnimation(); // 再次震动
+                            
+                            // UI 飘字 (暴击)
+                            if (m_UIForm != null && victim != null)
+                            {
+                                m_UIForm.ShowDamageNumber(victim.transform.position, 1, true);
+                            }
+                        }
+                        
+                        // 检查死亡
+                        if (MapManager.Instance.m_Entities[result.HitEntityId].IsDead)
+                        {
+                            victim?.Die();
+                        }
                     }
                     if (result.HitWallType == 4)
                     {
@@ -294,7 +377,10 @@ namespace StarForce
             if (!hasEnemies && hasPlayers)
             {
                 Log.Info("Game Won! All enemies defeated.");
-                // TODO: 触发胜利事件/UI
+                if (m_UIForm != null)
+                {
+                    m_UIForm.ShowWinUI();
+                }
             }
             // 失败条件：所有玩家被消灭
             else if (!hasPlayers)

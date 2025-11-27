@@ -212,15 +212,25 @@ namespace StarForce
                 if (cellType == 4) 
                 {
                     // 撞到饼干墙
-                result.HitWallType = 4;
-                result.HitWallX = nextX;
-                result.HitWallY = nextY;
+                    result.HitWallType = 4;
+                    result.HitWallX = nextX;
+                    result.HitWallY = nextY;
+                    
+                    // 移除饼干墙（破坏）
+                    m_Grid[nextY, nextX] = 0;
+                    // 更新可视化
+                    UpdateGridVisual(nextX, nextY);
+                    break; 
+                }
                 
-                // 移除饼干墙（破坏）
-                m_Grid[nextY, nextX] = 0;
-                // 更新可视化
-                UpdateGridVisual(nextX, nextY);
-                break; 
+                // 2.5 陷阱检查
+                if (cellType == 9)
+                {
+                    // 踩到陷阱，移动到该位置并死亡
+                    currX = nextX;
+                    currY = nextY;
+                    ApplyDamage(selfId, 999); // 即死
+                    break;
                 }
 
                 // 3. 动态实体检查
@@ -239,6 +249,48 @@ namespace StarForce
             result.FinalX = currX;
             result.FinalY = currY;
             return result;
+        }
+
+        // 击退逻辑
+        // 返回：是否造成了 Wall Slam (Crit)
+        public bool ApplyKnockback(int entityId, int dirX, int dirY)
+        {
+            if (!m_Entities.TryGetValue(entityId, out JellyData data)) return false;
+
+            int nextX = data.X + dirX;
+            int nextY = data.Y + dirY;
+
+            // 1. 检查是否出界
+            if (nextX < 0 || nextX >= m_Size || nextY < 0 || nextY >= m_Size)
+            {
+                return true; // 撞边界 = Wall Slam
+            }
+
+            // 2. 检查是否撞墙
+            int cellType = m_Grid[nextY, nextX];
+            if (cellType == 1 || cellType == 4) // 硬墙或饼干墙
+            {
+                return true; // 撞墙 = Wall Slam
+            }
+
+            // 3. 检查是否撞人 (简单的处理：如果后面有人，也算撞墙，或者连锁反应？这里先简化为撞墙)
+            int blockerId = GetEntityAt(nextX, nextY);
+            if (blockerId != -1)
+            {
+                return true; // 撞人 = Wall Slam (简化处理)
+            }
+
+            // 4. 执行击退
+            data.X = nextX;
+            data.Y = nextY;
+            
+            // 检查击退后是否踩到陷阱
+            if (m_Grid[nextY, nextX] == 9) // 陷阱
+            {
+                ApplyDamage(entityId, 999); // 即死
+            }
+
+            return false; // 成功击退，没有撞墙
         }
 
         public int GetEntityAt(int x, int y)
@@ -263,13 +315,92 @@ namespace StarForce
         }
 
         // 简单的伤害处理
-        public void ApplyDamage(int entityId, int dmg)
+        public bool ApplyDamage(int entityId, int dmg)
         {
             if (m_Entities.TryGetValue(entityId, out JellyData data))
             {
                 data.Hp -= dmg;
-                if (data.Hp <= 0) Log.Info($"Entity {entityId} Died.");
+                if (data.Hp <= 0) 
+                {
+                    Log.Info($"Entity {entityId} Died.");
+                    return true;
+                }
             }
+            return false;
+        }
+
+        public void TriggerTrap(int x, int y)
+        {
+            // 可以在这里添加陷阱触发的视觉效果逻辑
+            Log.Info($"Trap triggered at ({x}, {y})");
+        }
+
+        public void ApplyRepulseToEntity(int entityId, int dirX, int dirY)
+        {
+            // 调用现有的 ApplyKnockback 逻辑
+            ApplyKnockback(entityId, dirX, dirY);
+            
+            // 更新视觉位置
+            if (m_Entities.TryGetValue(entityId, out JellyData data))
+            {
+                var entity = GameEntry.Entity.GetEntity(entityId);
+                if (entity != null && entity.Logic is JellyLogic jellyLogic)
+                {
+                    // 简单的位移动画或直接设置位置
+                    // 这里我们假设 JellyLogic 会处理平滑移动，或者我们直接设置位置
+                    // 为了简单起见，我们让 JellyLogic 自己处理动画，这里只更新数据
+                    // 但实际上 JellyLogic 需要知道它被击退了
+                    jellyLogic.ApplyRepulse(dirX, dirY);
+                }
+            }
+        }
+
+        public bool ApplyDamageToEntity(int entityId, int damage, bool isCrit, int attackerId)
+        {
+            bool isKilled = ApplyDamage(entityId, damage);
+            
+            // 触发事件或回调
+            var entity = GameEntry.Entity.GetEntity(entityId);
+            if (entity != null && entity.Logic is JellyLogic jellyLogic)
+            {
+                // 通知 JellyLogic 它受伤了（虽然 JellyLogic 可能已经通过事件知道了，但这里是直接调用）
+                // 注意：JellyLogic.TakeDamage 也会调用 ApplyDamage，所以要小心死循环
+                // 这里的 ApplyDamageToEntity 应该是更高层的逻辑
+                // 我们修改 JellyLogic.TakeDamage 不再调用 MapManager.ApplyDamage，或者这里只做数据更新
+                
+                // 修正：JellyLogic.TakeDamage 负责调用 MapManager.ApplyDamage
+                // 所以这里我们应该调用 JellyLogic.TakeDamage
+                // 但 JellyLogic.TakeDamage 又会调用 MapManager.ApplyDamage...
+                // 让我们理清一下：
+                // 1. 碰撞发生 -> JellyLogic.HandleCollision -> MapManager.ApplyDamageToEntity
+                // 2. MapManager.ApplyDamageToEntity -> ApplyDamage (数据) -> JellyLogic.PlayHitAnimation (表现)
+                
+                // 实际上，JellyLogic.TakeDamage 设计为处理“受到伤害”的全部逻辑（数据+表现）
+                // 所以我们应该调用 JellyLogic.TakeDamage，但要避免重复扣血
+                
+                // 方案：让 JellyLogic.TakeDamage 负责扣血。MapManager.ApplyDamageToEntity 只负责调用它。
+                // 但 MapManager.ApplyDamage 是数据层核心。
+                
+                // 让我们简化：
+                // MapManager.ApplyDamage 只负责数据。
+                // JellyLogic.TakeDamage 负责表现 + 触发事件。
+                
+                // 这里我们只更新数据，然后通知表现
+                // isKilled 已经在上面计算了
+                
+                // 播放受击动画
+                jellyLogic.PlayHitAnimation();
+                
+                // 飘字
+                GameEntry.Event.Fire(this, DamageEventArgs.Create(entityId, damage, isCrit));
+                
+                if (isKilled)
+                {
+                    jellyLogic.Die();
+                    GameEntry.Event.Fire(this, JellyKilledEventArgs.Create(entityId));
+                }
+            }
+            return isKilled;
         }
         
         /// <summary>
