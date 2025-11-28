@@ -31,14 +31,18 @@ namespace StarForce
         {
             base.OnInit(userData);
             m_Renderer = GetComponentInChildren<SpriteRenderer>();
-            
-            // 注册事件监听
-            GameEntry.Event.Subscribe(JellyKilledEventArgs.EventId, OnJellyKilled);
         }
 
         protected override void OnShow(object userData)
         {
             base.OnShow(userData);
+            
+            // 注册事件监听
+            GameEntry.Event.Subscribe(JellyKilledEventArgs.EventId, OnJellyKilled);
+
+            // 重置 Scale，防止复用死亡实体（Scale为0）时不可见
+            transform.localScale = Vector3.one;
+
             // userData 传入初始数据
             if (userData is MapManager.JellyData data)
             {
@@ -46,14 +50,51 @@ namespace StarForce
                 // 设置初始位置
                 transform.position = MapManager.Instance.GridToWorld(data.X, data.Y);
                 
+                Log.Info($"JellyLogic OnShow: ID={m_JellyId}, Pos={transform.position}, Type={data.Type}");
+
                 // 根据类型换色 (简单的视觉区分)
-                m_Renderer.color = data.Type == 0 ? Color.green : Color.red; 
+                // if (m_Renderer != null)
+                // {
+                //    m_Renderer.color = data.Type == 0 ? Color.green : Color.red; 
+                // }
+                
+                // 设置 Sprite
+                UpdateSprite();
+            }
+            else
+            {
+                Log.Error($"JellyLogic OnShow: Invalid userData for Entity {Entity.Id}");
             }
         }
         
+        public void UpdateSprite()
+        {
+            if (m_Renderer == null) return;
+            
+            // 获取当前实体数据以确定类型
+            if (MapManager.Instance.m_Entities.TryGetValue(m_JellyId, out MapManager.JellyData data))
+            {
+                string spriteName = data.Type == 0 ? "player" : "monster";
+                Sprite sprite = MapManager.Instance.GetSprite(spriteName);
+                
+                if (sprite != null)
+                {
+                    m_Renderer.sprite = sprite;
+                    m_Renderer.color = Color.white; // 重置颜色，显示原图
+                }
+                else
+                {
+                    // Fallback
+                    m_Renderer.color = data.Type == 0 ? Color.green : Color.red;
+                }
+            }
+        }
+
         protected override void OnHide(bool isShutdown, object userData)
         {
             base.OnHide(isShutdown, userData);
+            // 停止所有动画
+            transform.DOKill();
             // 取消事件订阅
             GameEntry.Event.Unsubscribe(JellyKilledEventArgs.EventId, OnJellyKilled);
         }
@@ -189,74 +230,6 @@ namespace StarForce
             // 恢复原始位置和颜色
             transform.localPosition = originalPosition;
             m_Renderer.color = originalColor;
-        }
-        
-        /// <summary>
-        /// 执行物理碰撞处理
-        /// </summary>
-        public void HandleCollision(int hitEntityId, int hitDirX, int hitDirY, SlideResult slideResult)
-        {
-            // 获取被击中实体的数据
-            if (!MapManager.Instance.m_Entities.TryGetValue(hitEntityId, out MapManager.JellyData hitData))
-                return;
-            
-            // 计算伤害
-            int damage = _baseDamage;
-            bool isCrit = false;
-            
-            // 检查是否是地形杀暴击（撞到墙或边界）
-            if (slideResult.HitWallType > 0 || IsOutOfBounds(hitData.X + hitDirX, hitData.Y + hitDirY))
-            {
-                isCrit = true;
-                damage = (int)(_baseDamage * _critMultiplier);
-            }
-            
-            // 对被击中实体造成伤害
-            if (MapManager.Instance.m_Entities.TryGetValue(hitEntityId, out MapManager.JellyData targetData) && !targetData.IsDead)
-            {
-                // 使用MapManager来应用效果，避免直接访问Entity.Logic
-                
-                // 应用击退效果
-                MapManager.Instance.ApplyRepulseToEntity(hitEntityId, hitDirX, hitDirY);
-                
-                // 造成伤害
-                bool isKilled = MapManager.Instance.ApplyDamageToEntity(hitEntityId, damage, isCrit, m_JellyId);
-                
-                // 如果击杀了实体，检查连锁反应
-                if (isKilled && !m_IsInChainReaction)
-                {
-                    StartCoroutine(ProcessChainReaction(hitDirX, hitDirY));
-                }
-            }
-        }
-        
-        /// <summary>
-        /// 处理连锁反应
-        /// </summary>
-        private System.Collections.IEnumerator ProcessChainReaction(int dirX, int dirY)
-        {
-            m_IsInChainReaction = true;
-            
-            // 给一点延迟，让动画播放
-            yield return new WaitForSeconds(0.3f);
-            
-            // 获取当前实体数据
-            if (!MapManager.Instance.m_Entities.TryGetValue(m_JellyId, out MapManager.JellyData selfData) || selfData.IsDead)
-            {
-                m_IsInChainReaction = false;
-                yield break;
-            }
-            
-            // 计算新的滑动结果
-            SlideResult chainResult = MapManager.Instance.CalculateSlide(selfData.X, selfData.Y, dirX, dirY, m_JellyId);
-            
-            // 如果还有碰撞，继续处理连锁反应
-            if (chainResult.HitEntityId != -1)
-            {
-                HandleCollision(chainResult.HitEntityId, dirX, dirY, chainResult);
-            }
-            
-            m_IsInChainReaction = false;
         }
         
         /// <summary>

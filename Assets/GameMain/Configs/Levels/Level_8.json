@@ -1,0 +1,13 @@
+{
+    "levelId": 8,
+    "instruction": "Cracker Room: Smash through!",
+    "mapRows": [
+        {"row": [1, 1, 1, 1, 1, 1]},
+        {"row": [1, 2, 4, 4, 0, 1]},
+        {"row": [1, 0, 4, 4, 0, 1]},
+        {"row": [1, 0, 0, 0, 0, 1]},
+        {"row": [1, 0, 0, 0, 3, 1]},
+        {"row": [1, 1, 1, 1, 1, 1]}
+    ],
+    "enemyHp": 3
+}

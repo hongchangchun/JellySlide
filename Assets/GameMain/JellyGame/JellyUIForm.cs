@@ -62,7 +62,10 @@ namespace StarForce
 
         private void OnNextLevelButtonClick()
         {
-            Log.Info("Next Level");
+            if (!m_NextLevelButton.gameObject.activeSelf) return;
+            
+            Log.Info("Next Level Button Clicked");
+            m_NextLevelButton.interactable = false; // Prevent double click
             GameEntry.Event.Fire(this, NextLevelEventArgs.Create());
         }
 
@@ -72,6 +75,16 @@ namespace StarForce
             if (m_NextLevelButton != null)
             {
                 m_NextLevelButton.gameObject.SetActive(true);
+                m_NextLevelButton.interactable = true;
+            }
+        }
+
+        public void ShowLoseUI()
+        {
+            Log.Info("JellyUIForm.ShowLoseUI called.");
+            if (m_ResetButton != null)
+            {
+                m_ResetButton.gameObject.SetActive(true);
             }
         }
 
@@ -80,6 +93,11 @@ namespace StarForce
             if (m_LevelText != null)
             {
                 m_LevelText.text = $"Level {level}";
+            }
+            
+            if (m_NextLevelButton != null)
+            {
+                m_NextLevelButton.gameObject.SetActive(false);
             }
         }
 

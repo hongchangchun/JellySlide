@@ -1,0 +1,13 @@
+{
+    "levelId": 6,
+    "instruction": "Narrow Passage: Use the walls to stop!",
+    "mapRows": [
+        {"row": [1, 1, 1, 1, 1, 1]},
+        {"row": [1, 2, 0, 1, 0, 1]},
+        {"row": [1, 0, 0, 1, 0, 1]},
+        {"row": [1, 0, 0, 0, 0, 1]},
+        {"row": [1, 0, 0, 1, 3, 1]},
+        {"row": [1, 1, 1, 1, 1, 1]}
+    ],
+    "enemyHp": 3
+}

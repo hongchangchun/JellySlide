@@ -99,6 +99,8 @@ namespace StarForce
                         // Set HP from level data
                         MapManager.Instance.m_Entities[enemyId].Hp = data.enemyHp;
                         
+                        Log.Info($"Spawned Enemy at ({x},{y}) with ID {enemyId}, HP {data.enemyHp}");
+
                         GameEntry.Entity.ShowEntity(enemyId, typeof(JellyLogic), "Assets/GameMain/Entities/Jelly.prefab", "JellyGroup", MapManager.Instance.m_Entities[enemyId]);
                     }
                 }

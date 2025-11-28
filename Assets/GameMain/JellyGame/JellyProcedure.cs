@@ -24,12 +24,14 @@ namespace StarForce
         // 简单的输入记录
         private Vector2 m_TouchStartPos;
         private bool m_IsTouching = false;
+        private bool m_IsLevelFinished = false;
+        private Coroutine m_EnemyTurnCoroutine = null;
         
         // 地图相关配置
         private const float CELL_SIZE = 1.5f; // 与MapManager保持一致
 
         private int m_CurrentLevelIndex = 1;
-        private const int MAX_LEVEL = 5;
+        private const int MAX_LEVEL = 20;
 
         protected override void OnEnter(ProcedureOwner procedureOwner)
         {
@@ -53,6 +55,14 @@ namespace StarForce
         
         private void LoadCurrentLevel()
         {
+            if (m_EnemyTurnCoroutine != null)
+            {
+                GameEntry.Base.StopCoroutine(m_EnemyTurnCoroutine);
+                m_EnemyTurnCoroutine = null;
+            }
+
+            m_IsAnimating = false;
+            m_IsLevelFinished = false;
             MapManager.Instance.Cleanup();
             LevelLoader.LoadLevel(m_CurrentLevelIndex);
             if (m_UIForm != null)
@@ -63,12 +73,14 @@ namespace StarForce
 
         private void OnResetLevel(object sender, GameEventArgs e)
         {
+            Log.Info("OnResetLevel event received.");
             LoadCurrentLevel();
             m_IsPlayerTurn = true;
         }
 
         private void OnNextLevel(object sender, GameEventArgs e)
         {
+            Log.Info("OnNextLevel event received.");
             m_CurrentLevelIndex++;
             if (m_CurrentLevelIndex > MAX_LEVEL)
             {
@@ -89,6 +101,12 @@ namespace StarForce
 
         protected override void OnLeave(ProcedureOwner procedureOwner, bool isShutdown)
         {
+            if (m_EnemyTurnCoroutine != null)
+            {
+                GameEntry.Base.StopCoroutine(m_EnemyTurnCoroutine);
+                m_EnemyTurnCoroutine = null;
+            }
+
             GameEntry.Event.Unsubscribe(JellyMoveCompleteEventArgs.EventId, OnJellyMoveComplete);
             GameEntry.Event.Unsubscribe(OpenUIFormSuccessEventArgs.EventId, OnOpenUIFormSuccess);
             GameEntry.Event.Unsubscribe(ResetLevelEventArgs.EventId, OnResetLevel);
@@ -229,12 +247,18 @@ namespace StarForce
             // 动画结束，解除锁定
             m_IsAnimating = false;
             
+            if (m_IsLevelFinished) return;
+
             // 如果是玩家回合结束，切换到敌人回合
             if (m_IsPlayerTurn)
             {
                 m_IsPlayerTurn = false;
                 // 延迟 0.5s 执行敌人 AI
-                GameEntry.Base.StartCoroutine(EnemyTurnCoroutine());
+                if (m_EnemyTurnCoroutine != null)
+                {
+                    GameEntry.Base.StopCoroutine(m_EnemyTurnCoroutine);
+                }
+                m_EnemyTurnCoroutine = GameEntry.Base.StartCoroutine(EnemyTurnCoroutine());
             }
             // 敌人移动完成后，不立即切换回合，而是在EnemyTurnCoroutine中处理
         }
@@ -243,12 +267,16 @@ namespace StarForce
         {
             yield return new WaitForSeconds(0.5f);
             
+            if (m_IsLevelFinished) yield break;
+
             // 获取所有敌人和玩家实体
             var enemies = new System.Collections.Generic.List<JellyData>();
             var players = new System.Collections.Generic.List<JellyData>();
             
             foreach (var entityData in MapManager.Instance.m_Entities.Values)
             {
+                if (entityData.IsDead) continue;
+
                 if (entityData.Type == 0) // 0: Player
                 {
                     players.Add(entityData);
@@ -345,7 +373,7 @@ namespace StarForce
         {
             foreach (var entityData in MapManager.Instance.m_Entities.Values)
             {
-                if (entityData.Type == 1) // 1: Enemy
+                if (entityData.Type == 1 && !entityData.IsDead) // 1: Enemy
                 {
                     return true;
                 }
@@ -361,18 +389,27 @@ namespace StarForce
             bool hasEnemies = false;
             bool hasPlayers = false;
             
+            int enemyCount = 0;
+            int playerCount = 0;
+
             foreach (var entityData in MapManager.Instance.m_Entities.Values)
             {
+                if (entityData.IsDead) continue;
+
                 if (entityData.Type == 0) // 0: Player
                 {
                     hasPlayers = true;
+                    playerCount++;
                 }
                 else if (entityData.Type == 1) // 1: Enemy
                 {
                     hasEnemies = true;
+                    enemyCount++;
                 }
             }
             
+            Log.Info($"CheckGameState: Players={playerCount}, Enemies={enemyCount}");
+
             // 胜利条件：所有敌人被消灭
             if (!hasEnemies && hasPlayers)
             {
@@ -386,11 +423,20 @@ namespace StarForce
             else if (!hasPlayers)
             {
                 Log.Info("Game Over! All players defeated.");
-                // TODO: 触发失败事件/UI
+                m_IsLevelFinished = true;
+                if (m_UIForm != null)
+                {
+                    m_UIForm.ShowLoseUI();
+                }
             }
             
             // 无论胜利失败，都将回合交回玩家或重置状态
             m_IsPlayerTurn = true;
+
+            if (hasPlayers && !hasEnemies)
+            {
+                m_IsLevelFinished = true;
+            }
         }
     }
 }

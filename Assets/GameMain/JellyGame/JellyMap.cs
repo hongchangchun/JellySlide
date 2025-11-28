@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityGameFramework.Runtime;
+using GameFramework.Resource;
 
 namespace StarForce
 {
@@ -11,6 +12,10 @@ namespace StarForce
     {
         private static MapManager s_Instance;
         public static MapManager Instance => s_Instance ?? (s_Instance = new MapManager());
+
+        // Sprite 资源管理
+        private Dictionary<string, Sprite> m_Sprites = new Dictionary<string, Sprite>();
+        private bool m_IsSpritesLoaded = false;
 
         // 0:空, 1:墙, 4:饼干墙(可破坏)
         private int[,] m_Grid;
@@ -26,6 +31,7 @@ namespace StarForce
         private Color m_EmptyCellColor = new Color(0.9f, 0.9f, 0.9f, 0.5f); // 空格子颜色
         private Color m_WallCellColor = new Color(0.3f, 0.3f, 0.3f, 1f);    // 墙颜色
         private Color m_CrackerColor = new Color(0.8f, 0.6f, 0.2f, 1f);     // 饼干墙颜色
+        private Color m_TrapColor = new Color(0.6f, 0.1f, 0.1f, 1f);        // 陷阱颜色 (深红)
 
         // 简单的实体数据类
         public class JellyData
@@ -40,6 +46,9 @@ namespace StarForce
 
         public void InitLevel(int[,] mapData)
         {
+            // 加载 Sprite 资源
+            LoadSprites();
+
             // 深拷贝地图数据
             m_Size = mapData.GetLength(0);
             m_Grid = new int[m_Size, m_Size];
@@ -55,11 +64,80 @@ namespace StarForce
             CreateGridVisuals();
         }
         
+        private void LoadSprites()
+        {
+            if (m_IsSpritesLoaded) return;
+
+            GameEntry.Resource.LoadAsset("Assets/GameMain/Atlas/jelly_spritesheet_512.png", typeof(Texture2D), new LoadAssetCallbacks(
+                (assetName, asset, duration, userData) =>
+                {
+                    Texture2D texture = (Texture2D)asset;
+                    if (texture == null) return;
+
+                    // 创建 Sprite (基于 .meta 文件数据)
+                    // Texture Size: 512x512
+                    // Pivot: 0.5, 0.5, PixelsPerUnit: 64
+                    m_Sprites["player"] = Sprite.Create(texture, new Rect(0, 448, 64, 64), new Vector2(0.5f, 0.5f), 64);
+                    m_Sprites["monster"] = Sprite.Create(texture, new Rect(64, 448, 64, 64), new Vector2(0.5f, 0.5f), 64);
+                    m_Sprites["wall"] = Sprite.Create(texture, new Rect(128, 448, 64, 64), new Vector2(0.5f, 0.5f), 64);
+                    m_Sprites["box"] = Sprite.Create(texture, new Rect(192, 448, 64, 64), new Vector2(0.5f, 0.5f), 64);
+                    m_Sprites["warn"] = Sprite.Create(texture, new Rect(256, 448, 64, 64), new Vector2(0.5f, 0.5f), 64);
+                    m_Sprites["black"] = Sprite.Create(texture, new Rect(320, 448, 64, 64), new Vector2(0.5f, 0.5f), 64);
+
+                    m_IsSpritesLoaded = true;
+                    Log.Info("Sprites loaded successfully from atlas.");
+
+                    // 资源加载完成后刷新显示
+                    RefreshAllVisuals();
+                    RefreshEntityVisuals();
+                },
+                (assetName, status, errorMessage, userData) =>
+                {
+                    Log.Error($"Load Sprites Failed: {errorMessage}");
+                }
+            ));
+        }
+
+        public Sprite GetSprite(string name)
+        {
+            if (m_Sprites.TryGetValue(name, out Sprite sprite))
+            {
+                return sprite;
+            }
+            return null;
+        }
+
+        private void RefreshAllVisuals()
+        {
+            if (m_CellVisuals == null) return;
+            for (int y = 0; y < m_Size; y++)
+            {
+                for (int x = 0; x < m_Size; x++)
+                {
+                    UpdateGridVisual(x, y);
+                }
+            }
+        }
+
+        private void RefreshEntityVisuals()
+        {
+            foreach (var kv in m_Entities)
+            {
+                var entity = GameEntry.Entity.GetEntity(kv.Key);
+                if (entity != null && entity.Logic is JellyLogic jellyLogic)
+                {
+                    jellyLogic.UpdateSprite();
+                }
+            }
+        }
+
         /// <summary>
         /// 创建网格可视化
         /// </summary>
         private void CreateGridVisuals()
         {
+            Log.Info($"CreateGridVisuals: Size={m_Size}, CellSize={m_CellSize}");
+
             // 销毁旧的网格可视化
             if (m_GridVisualRoot != null)
             {
@@ -79,35 +157,23 @@ namespace StarForce
             {
                 for (int x = 0; x < m_Size; x++)
                 {
-                    GameObject cell = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                    cell.name = $"Cell_{x}_{y}";
+                    GameObject cell = new GameObject($"Cell_{x}_{y}");
                     cell.transform.SetParent(m_GridVisualRoot.transform);
                     
+                    // 添加 SpriteRenderer
+                    SpriteRenderer renderer = cell.AddComponent<SpriteRenderer>();
+                    renderer.sortingOrder = 0; // 地图层级
+
                     // 设置位置和大小
                     Vector3 worldPos = new Vector3(
                         x * m_CellSize + offsetX,
                         y * m_CellSize + offsetY,
                         1f); // 在实体下方
                     cell.transform.position = worldPos;
-                    cell.transform.localScale = new Vector3(m_CellSize * 0.95f, m_CellSize * 0.95f, 1f);
-                    
-                    // 设置颜色
-                    Renderer renderer = cell.GetComponent<Renderer>();
-                    if (renderer != null)
-                    {
-                        switch (m_Grid[y, x])
-                        {
-                            case 1: // 墙
-                                renderer.material.color = m_WallCellColor;
-                                break;
-                            case 4: // 饼干墙
-                                renderer.material.color = m_CrackerColor;
-                                break;
-                            default: // 空格子
-                                renderer.material.color = m_EmptyCellColor;
-                                break;
-                        }
-                    }
+                    cell.transform.localScale = new Vector3(m_CellSize * 0.95f, m_CellSize * 0.95f, 1f); // 调整缩放适配格子
+
+                    // 设置初始 Sprite (如果已加载)
+                    UpdateGridVisualInternal(x, y, renderer);
                     
                     // 添加边框
                     AddBorderToCell(cell);
@@ -164,22 +230,51 @@ namespace StarForce
                 GameObject cell = m_CellVisuals[y, x];
                 if (cell != null)
                 {
-                    Renderer renderer = cell.GetComponent<Renderer>();
-                    if (renderer != null)
-                    {
-                        switch (m_Grid[y, x])
-                        {
-                            case 1: // 墙
-                                renderer.material.color = m_WallCellColor;
-                                break;
-                            case 4: // 饼干墙
-                                renderer.material.color = m_CrackerColor;
-                                break;
-                            default: // 空格子
-                                renderer.material.color = m_EmptyCellColor;
-                                break;
-                        }
-                    }
+                    SpriteRenderer renderer = cell.GetComponent<SpriteRenderer>();
+                    UpdateGridVisualInternal(x, y, renderer);
+                }
+            }
+        }
+
+        private void UpdateGridVisualInternal(int x, int y, SpriteRenderer renderer)
+        {
+            if (renderer == null) return;
+
+            string spriteName = "black"; // 默认/空格子
+            Color color = Color.white;
+
+            switch (m_Grid[y, x])
+            {
+                case 1: // 墙
+                    spriteName = "wall";
+                    break;
+                case 4: // 饼干墙
+                    spriteName = "box";
+                    break;
+                case 9: // 陷阱
+                    spriteName = "warn";
+                    break;
+                default: // 空格子
+                    spriteName = "black";
+                    break;
+            }
+
+            Sprite sprite = GetSprite(spriteName);
+            if (sprite != null)
+            {
+                renderer.sprite = sprite;
+                renderer.color = Color.white;
+            }
+            else
+            {
+                // Fallback to colors if sprite not loaded yet
+                renderer.sprite = null; 
+                switch (m_Grid[y, x])
+                {
+                    case 1: renderer.color = m_WallCellColor; break;
+                    case 4: renderer.color = m_CrackerColor; break;
+                    case 9: renderer.color = m_TrapColor; break;
+                    default: renderer.color = m_EmptyCellColor; break;
                 }
             }
         }
@@ -317,6 +412,7 @@ namespace StarForce
         // 简单的伤害处理
         public bool ApplyDamage(int entityId, int dmg)
         {
+            Log.Info($"ApplyDamage: Entity {entityId} took {dmg} damage. Trace: {System.Environment.StackTrace}");
             if (m_Entities.TryGetValue(entityId, out JellyData data))
             {
                 data.Hp -= dmg;
@@ -408,10 +504,24 @@ namespace StarForce
         /// </summary>
         public void Cleanup()
         {
+            Log.Info($"MapManager.Cleanup called.");
             if (m_GridVisualRoot != null)
             {
                 Object.Destroy(m_GridVisualRoot);
                 m_GridVisualRoot = null;
+            }
+            
+            // Note: We do not clear sprites here because they are global resources for the session.
+            // If we want to clear them, we should unload the texture.
+            // For now, keep them cached.
+            
+            // 隐藏所有实体
+            foreach (var entityId in new List<int>(m_Entities.Keys))
+            {
+                if (GameEntry.Entity.HasEntity(entityId))
+                {
+                    GameEntry.Entity.HideEntity(entityId);
+                }
             }
             
             m_CellVisuals = null;
