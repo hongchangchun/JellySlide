@@ -8,24 +8,19 @@ namespace StarForce
     public class JellyUIForm : UGuiForm
     {
         private ProcedureJellyGame m_Procedure; 
-        private Text m_LevelText;
-        private Button m_ResetButton;
-        private Button m_NextLevelButton;
-        private Transform m_DamageNumberRoot;
-        private GameObject m_DamageNumberTemplate;
+        public Text m_LevelText;
+        public Text m_LevelDetailText;
+        public GameObject m_WinRoot;
+        public GameObject m_LossRoot;
+        public Transform m_DamageNumberRoot;
+        public GameObject m_DamageNumberTemplate;
 
         protected override void OnInit(object userData)
         {
             base.OnInit(userData);
-            
-            m_LevelText = transform.Find("Panel/LevelText").GetComponent<Text>();
-            m_ResetButton = transform.Find("Panel/ResetButton").GetComponent<Button>();
-            m_NextLevelButton = transform.Find("Panel/NextLevelButton").GetComponent<Button>();
-            m_DamageNumberRoot = transform.Find("Panel/DamageNumbers");
-            m_DamageNumberTemplate = transform.Find("Panel/DamageNumberTemplate").gameObject;
-            
-            m_DamageNumberTemplate.SetActive(false);            
-            m_NextLevelButton.gameObject.SetActive(false);
+            m_DamageNumberTemplate.SetActive(false);
+            m_WinRoot.SetActive(false);
+            m_LossRoot.SetActive(false);
         }
 
         protected override void OnOpen(object userData)
@@ -37,7 +32,8 @@ namespace StarForce
             {
                 Log.Warning("JellyUIForm opened without ProcedureJellyGame reference!");
             }
-            m_NextLevelButton.gameObject.SetActive(false);
+            m_WinRoot.SetActive(false);
+            m_LossRoot.SetActive(false);
         }
 
         protected override void OnClose(bool isShutdown, object userData)
@@ -48,6 +44,7 @@ namespace StarForce
         public void OnResetButtonClick()
         {
             Log.Info("Reset Level");
+            m_LossRoot.SetActive(false);
             GameEntry.Event.Fire(this, ResetLevelEventArgs.Create());
         }
 
@@ -58,30 +55,23 @@ namespace StarForce
         }
         public void OnNextLevelButtonClick()
         {
-            if (!m_NextLevelButton.gameObject.activeSelf) return;
-            
             Log.Info("Next Level Button Clicked");
-            m_NextLevelButton.interactable = false; // Prevent double click
+            m_WinRoot.SetActive(false);
             GameEntry.Event.Fire(this, NextLevelEventArgs.Create());
         }
 
         public void ShowWinUI()
         {
             Log.Info("JellyUIForm.ShowWinUI called.");
-            if (m_NextLevelButton != null)
-            {
-                m_NextLevelButton.gameObject.SetActive(true);
-                m_NextLevelButton.interactable = true;
-            }
+            m_WinRoot.SetActive(true);
+            m_LossRoot.SetActive(false);
         }
 
         public void ShowLoseUI()
         {
             Log.Info("JellyUIForm.ShowLoseUI called.");
-            if (m_ResetButton != null)
-            {
-                m_ResetButton.gameObject.SetActive(true);
-            }
+            m_WinRoot.SetActive(false);
+            m_LossRoot.SetActive(true);
         }
 
         public void UpdateLevelDisplay(int level)
@@ -90,10 +80,9 @@ namespace StarForce
             {
                 m_LevelText.text = $"Level {level}";
             }
-            
-            if (m_NextLevelButton != null)
+            if (m_LevelDetailText != null)
             {
-                m_NextLevelButton.gameObject.SetActive(false);
+                m_LevelDetailText.text = MapManager.Instance.CurrentLevelDescription;
             }
         }
 

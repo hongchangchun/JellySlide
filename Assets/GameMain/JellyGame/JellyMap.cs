@@ -25,6 +25,9 @@ namespace StarForce
         // 存储动态实体的数据引用: Key=EntityId, Value=JellyData
         public Dictionary<int, JellyData> m_Entities = new Dictionary<int, JellyData>();
         
+        public string CurrentLevelInstruction { get; set; }
+        public string CurrentLevelDescription { get; set; }
+
         // 网格可视化相关
         private GameObject m_GridVisualRoot;
         private GameObject[,] m_CellVisuals; // 存储格子的可视化对象

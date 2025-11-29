@@ -7,9 +7,14 @@
     <String Key="Game.Summary" Value="This project is a demo game made with Game Framework. It's intended to demonstrate how this game framework should be used for developers' reference." />
     <String Key="Game.Introduction" Value="Game Framework is literally a game framework, based on Unity game engine. It encapsulates commonly used game modules during development, and, to a large degree, standardises the process, enhances the development speed and ensures the product quality." />
     <String Key="Menu.StartButton" Value="START" />
+    <String Key="Menu.ContinueButton" Value="CONTINUE" />
     <String Key="Menu.SettingButton" Value="SETTINGS" />
     <String Key="Menu.AboutButton" Value="ABOUT" />
     <String Key="Menu.QuitButton" Value="QUIT" />
+    <String Key="Menu.NextButton" Value="NEXT" />
+    <String Key="Menu.ResetButton" Value="RETRY" />
+    <String Key="Text.Win" Value="Win" />
+    <String Key="Text.Loss" Value="Loss" />
     <String Key="Dialog.ConfirmButton" Value="OK" />
     <String Key="Dialog.CancelButton" Value="CANCEL" />
     <String Key="Dialog.OtherButton" Value="" />

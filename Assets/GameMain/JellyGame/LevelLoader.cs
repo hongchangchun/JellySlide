@@ -12,6 +12,7 @@ namespace StarForce
         {
             public int levelId;
             public string instruction;
+            public string description;
             public int[][] map; // Unity JsonUtility doesn't support multidimensional arrays directly, need a wrapper or use List
             public int enemyHp;
         }
@@ -28,6 +29,7 @@ namespace StarForce
         {
             public int levelId;
             public string instruction;
+            public string description;
             public RowData[] mapRows;
             public int enemyHp;
         }
@@ -71,6 +73,8 @@ namespace StarForce
 
             // Initialize Map
             MapManager.Instance.InitLevel(map);
+            MapManager.Instance.CurrentLevelInstruction = data.instruction;
+            MapManager.Instance.CurrentLevelDescription = data.description;
 
             // Spawn Entities based on map data
             // 2: Player, 3: Enemy

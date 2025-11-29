@@ -62,16 +62,18 @@ namespace StarForce
             // 1. 初始化地图数据
             LoadCurrentLevel();
 
-            // 打开 UI（通过数据表 ID 配置）
-            m_UIFormId = (int)GameEntry.UI.OpenUIForm(UIFormId.JellyGameForm, this);
-
             // 订阅事件
             GameEntry.Event.Subscribe(JellyMoveCompleteEventArgs.EventId, OnJellyMoveComplete);
             GameEntry.Event.Subscribe(OpenUIFormSuccessEventArgs.EventId, OnOpenUIFormSuccess);
             GameEntry.Event.Subscribe(ResetLevelEventArgs.EventId, OnResetLevel);
             GameEntry.Event.Subscribe(NextLevelEventArgs.EventId, OnNextLevel);
+
+            // 打开 UI（通过数据表 ID 配置）
+            m_UIFormId = (int)GameEntry.UI.OpenUIForm(UIFormId.JellyGameForm, this);
+            Log.Info("Entered ProcedureJellyGame, OpenUIForm");
+
         }
-        
+
         private void LoadCurrentLevel()
         {
             if (m_EnemyTurnCoroutine != null)
@@ -152,10 +154,15 @@ namespace StarForce
         private void OnOpenUIFormSuccess(object sender, GameEventArgs e)
         {
             OpenUIFormSuccessEventArgs ne = (OpenUIFormSuccessEventArgs)e;
-            if (ne.UserData == null && ne.UIForm.Logic is JellyUIForm form)
+            if (ne.UIForm.Logic is JellyUIForm form)
             {
+                Log.Info("JellyUIForm opened successfully.");
                 m_UIForm = form;
                 m_UIForm.UpdateLevelDisplay(m_CurrentLevelIndex);
+            }
+            else
+            {
+                Log.Info("OpenUIFormSuccessEventArgs UserData does not match.");
             }
         }
         

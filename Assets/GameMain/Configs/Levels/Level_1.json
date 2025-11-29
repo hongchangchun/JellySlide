@@ -1,6 +1,7 @@
 {
     "levelId": 1,
     "instruction": "Slide to hit the enemy!",
+    "description": "This is the first level. Good luck!",
     "mapRows": [
         {"row": [1,1,1,1,1,1]},
         {"row": [1,0,0,0,0,1]},
