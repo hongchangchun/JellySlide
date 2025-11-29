@@ -14,6 +14,7 @@ namespace StarForce
     public class ProcedureMenu : ProcedureBase
     {
         private bool m_StartGame = false;
+        private bool m_ContinueGame = false;
         private MenuForm m_MenuForm = null;
 
         public override bool UseNativeDialog
@@ -29,6 +30,11 @@ namespace StarForce
             m_StartGame = true;
         }
 
+        public void ContinueGame()
+        {
+            m_ContinueGame = true;
+        }
+
         protected override void OnEnter(ProcedureOwner procedureOwner)
         {
             base.OnEnter(procedureOwner);
@@ -36,6 +42,7 @@ namespace StarForce
             GameEntry.Event.Subscribe(OpenUIFormSuccessEventArgs.EventId, OnOpenUIFormSuccess);
 
             m_StartGame = false;
+            m_ContinueGame = false;
             GameEntry.UI.OpenUIForm(UIFormId.MenuForm, this);
         }
 
@@ -60,6 +67,15 @@ namespace StarForce
             {
                 procedureOwner.SetData<VarInt32>("NextSceneId", GameEntry.Config.GetInt("Scene.Main"));
                 procedureOwner.SetData<VarByte>("GameMode", (byte)GameMode.Survival);
+                procedureOwner.SetData<VarInt32>("StartLevelIndex", 1);
+                ChangeState<ProcedureChangeScene>(procedureOwner);
+            }
+            else if (m_ContinueGame)
+            {
+                procedureOwner.SetData<VarInt32>("NextSceneId", GameEntry.Config.GetInt("Scene.Main"));
+                procedureOwner.SetData<VarByte>("GameMode", (byte)GameMode.Survival);
+                procedureOwner.SetData<VarInt32>("StartLevelIndex", GameEntry.Setting.GetInt(Constant.Setting.JellySlide_CurrentLevel, 1));
+                procedureOwner.SetData<VarByte>("ContinueGame", 1);
                 ChangeState<ProcedureChangeScene>(procedureOwner);
             }
         }

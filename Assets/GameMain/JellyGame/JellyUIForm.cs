@@ -7,17 +7,14 @@ namespace StarForce
 {
     public class JellyUIForm : UGuiForm
     {
+        private ProcedureJellyGame m_Procedure; 
         private Text m_LevelText;
         private Button m_ResetButton;
         private Button m_NextLevelButton;
         private Transform m_DamageNumberRoot;
         private GameObject m_DamageNumberTemplate;
 
-#if UNITY_2017_3_OR_NEWER
         protected override void OnInit(object userData)
-#else
-        protected internal override void OnInit(object userData)
-#endif
         {
             base.OnInit(userData);
             
@@ -27,40 +24,39 @@ namespace StarForce
             m_DamageNumberRoot = transform.Find("Panel/DamageNumbers");
             m_DamageNumberTemplate = transform.Find("Panel/DamageNumberTemplate").gameObject;
             
-            m_DamageNumberTemplate.SetActive(false);
-            
-            m_ResetButton.onClick.AddListener(OnResetButtonClick);
-            m_NextLevelButton.onClick.AddListener(OnNextLevelButtonClick);
+            m_DamageNumberTemplate.SetActive(false);            
             m_NextLevelButton.gameObject.SetActive(false);
         }
 
-#if UNITY_2017_3_OR_NEWER
         protected override void OnOpen(object userData)
-#else
-        protected internal override void OnOpen(object userData)
-#endif
         {
             base.OnOpen(userData);
             Log.Info("JellyUIForm OnOpen called.");
+            m_Procedure = userData as ProcedureJellyGame;
+            if (m_Procedure == null)
+            {
+                Log.Warning("JellyUIForm opened without ProcedureJellyGame reference!");
+            }
             m_NextLevelButton.gameObject.SetActive(false);
         }
 
-#if UNITY_2017_3_OR_NEWER
         protected override void OnClose(bool isShutdown, object userData)
-#else
-        protected internal override void OnClose(bool isShutdown, object userData)
-#endif
         {
             base.OnClose(isShutdown, userData);
         }
 
-        private void OnResetButtonClick()
+        public void OnResetButtonClick()
         {
             Log.Info("Reset Level");
             GameEntry.Event.Fire(this, ResetLevelEventArgs.Create());
         }
 
-        private void OnNextLevelButtonClick()
+        public void OnBackButtonClick()
+        {
+            Log.Info("Back to Menu");
+            m_Procedure.ReturnToMenu = true;
+        }
+        public void OnNextLevelButtonClick()
         {
             if (!m_NextLevelButton.gameObject.activeSelf) return;
             

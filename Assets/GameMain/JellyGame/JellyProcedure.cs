@@ -15,7 +15,7 @@ namespace StarForce
                 return false;
             }
         }
-        
+        public bool ReturnToMenu { get; set; }
         private bool m_IsPlayerTurn = true;
         private bool m_IsAnimating = false;
         private JellyUIForm m_UIForm;
@@ -38,13 +38,32 @@ namespace StarForce
             base.OnEnter(procedureOwner);
             m_IsPlayerTurn = true;
             m_IsAnimating = false;
-            m_CurrentLevelIndex = 1;
+
+            // Determine start level
+            int startLevel = procedureOwner.GetData<VarInt32>("StartLevelIndex");
+            if (startLevel > 0)
+            {
+                m_CurrentLevelIndex = startLevel;
+            }
+            else
+            {
+                byte cont = procedureOwner.GetData<VarByte>("ContinueGame");
+                if (cont != 0)
+                {
+                    m_CurrentLevelIndex = GameEntry.Setting.GetInt(Constant.Setting.JellySlide_CurrentLevel, 1);
+                    procedureOwner.SetData<VarByte>("ContinueGame", 0);
+                }
+                else
+                {
+                    m_CurrentLevelIndex = 1;
+                }
+            }
 
             // 1. 初始化地图数据
             LoadCurrentLevel();
 
-            // 打开 UI
-            m_UIFormId = (int)GameEntry.UI.OpenUIForm("Assets/GameMain/UI/JellyUIForm.prefab", "Default");
+            // 打开 UI（通过数据表 ID 配置）
+            m_UIFormId = (int)GameEntry.UI.OpenUIForm(UIFormId.JellyGameForm, this);
 
             // 订阅事件
             GameEntry.Event.Subscribe(JellyMoveCompleteEventArgs.EventId, OnJellyMoveComplete);
@@ -96,6 +115,13 @@ namespace StarForce
 
             if (m_IsAnimating || !m_IsPlayerTurn) return;
 
+            // 检测开关，如果为 true，则切换到主菜单流程
+            if (ReturnToMenu)
+            {
+                procedureOwner.SetData<VarInt32>("NextSceneId", GameEntry.Config.GetInt("Scene.Menu")); // 可选：传递参数
+                ChangeState<ProcedureMenu>(procedureOwner);
+            }
+
             HandleInput();
         }
 
@@ -144,6 +170,7 @@ namespace StarForce
 
         private void HandleInput()
         {
+            if (m_IsLevelFinished) return;
             if (Input.GetMouseButtonDown(0))
             {
                 m_TouchStartPos = Input.mousePosition;
@@ -414,6 +441,8 @@ namespace StarForce
             if (!hasEnemies && hasPlayers)
             {
                 Log.Info("Game Won! All enemies defeated.");
+                GameEntry.Setting.SetInt(Constant.Setting.JellySlide_CurrentLevel, m_CurrentLevelIndex);
+                GameEntry.Setting.Save();
                 if (m_UIForm != null)
                 {
                     m_UIForm.ShowWinUI();

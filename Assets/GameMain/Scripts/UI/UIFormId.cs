@@ -33,5 +33,10 @@ namespace StarForce
         /// 关于。
         /// </summary>
         AboutForm = 102,
+
+        /// <summary>
+        /// 果冻玩法主界面。
+        /// </summary>
+        JellyGameForm = 201,
     }
 }

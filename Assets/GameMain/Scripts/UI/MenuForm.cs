@@ -22,6 +22,11 @@ namespace StarForce
             m_ProcedureMenu.StartGame();
         }
 
+        public void OnContinueButtonClick()
+        {
+            m_ProcedureMenu.ContinueGame();
+        }
+
         public void OnSettingButtonClick()
         {
             GameEntry.UI.OpenUIForm(UIFormId.SettingForm);
@@ -43,11 +48,7 @@ namespace StarForce
             });
         }
 
-#if UNITY_2017_3_OR_NEWER
         protected override void OnOpen(object userData)
-#else
-        protected internal override void OnOpen(object userData)
-#endif
         {
             base.OnOpen(userData);
 
@@ -61,11 +62,7 @@ namespace StarForce
             m_QuitButton.SetActive(Application.platform != RuntimePlatform.IPhonePlayer);
         }
 
-#if UNITY_2017_3_OR_NEWER
         protected override void OnClose(bool isShutdown, object userData)
-#else
-        protected internal override void OnClose(bool isShutdown, object userData)
-#endif
         {
             m_ProcedureMenu = null;
 

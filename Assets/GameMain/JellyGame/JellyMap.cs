@@ -176,7 +176,7 @@ namespace StarForce
                     UpdateGridVisualInternal(x, y, renderer);
                     
                     // 添加边框
-                    AddBorderToCell(cell);
+                    //AddBorderToCell(cell);
                     
                     m_CellVisuals[y, x] = cell;
                 }
