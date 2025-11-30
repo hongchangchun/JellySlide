@@ -14,6 +14,10 @@ namespace StarForce
         public GameObject m_LossRoot;
         public Transform m_DamageNumberRoot;
         public GameObject m_DamageNumberTemplate;
+        public Button m_ResetButton;
+        public Button m_NextLevelButton;
+        public Button m_AdButton;
+        public Text m_ReviveCountText;
 
         protected override void OnInit(object userData)
         {
@@ -34,6 +38,7 @@ namespace StarForce
             }
             m_WinRoot.SetActive(false);
             m_LossRoot.SetActive(false);
+            UpdateReviveDisplay();
         }
 
         protected override void OnClose(bool isShutdown, object userData)
@@ -43,16 +48,45 @@ namespace StarForce
 
         public void OnResetButtonClick()
         {
-            Log.Info("Reset Level");
-            m_LossRoot.SetActive(false);
-            GameEntry.Event.Fire(this, ResetLevelEventArgs.Create());
+            Log.Info("Reset Level Clicked");
+            if (ReviveManager.Instance.ConsumeRevive())
+            {
+                Log.Info("Revive consumed. Resetting level.");
+                UpdateReviveDisplay();
+                m_LossRoot.SetActive(false);
+                GameEntry.Event.Fire(this, ResetLevelEventArgs.Create());
+            }
+            else
+            {
+                Log.Info("No revives left!");
+                // Optionally show a message saying "Watch Ad to get more revives!"
+            }
         }
 
+        public void OnAdButtonClick()
+        {
+            Log.Info("Watch Ad Button Clicked");
+            AdManager.Instance.ShowRewardedAd(() => {
+                ReviveManager.Instance.AddRevive(1);
+                UpdateReviveDisplay();
+                // Hide Ad button or update UI state if needed
+            });
+        }
+        
         public void OnBackButtonClick()
         {
             Log.Info("Back to Menu");
             m_Procedure.ReturnToMenu = true;
         }
+
+        private void UpdateReviveDisplay()
+        {
+            if (m_ReviveCountText != null)
+            {
+                m_ReviveCountText.text = $"Revives: {ReviveManager.Instance.ReviveCount}";
+            }
+        }
+
         public void OnNextLevelButtonClick()
         {
             Log.Info("Next Level Button Clicked");

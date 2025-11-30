@@ -21,6 +21,8 @@ namespace StarForce
             public const string UISoundMuted = "Setting.UISoundMuted";
             public const string UISoundVolume = "Setting.UISoundVolume";
             public const string JellySlide_CurrentLevel = "Setting.JellySlide_CurrentLevel";
+            public const string ReviveCount = "Setting.ReviveCount";
+            public const string LastReviveDate = "Setting.LastReviveDate";
         }
     }
 }
